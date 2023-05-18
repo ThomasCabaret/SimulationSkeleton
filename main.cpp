@@ -6,6 +6,7 @@
 // Simple struct to hold particle data
 struct Particle {
     sf::Vector2f position;
+    sf::Vector2f velocity;
     sf::CircleShape shape;
 };
 
@@ -23,12 +24,14 @@ struct Model {
         std::random_device rd;
         std::mt19937 gen(rd());
         std::uniform_real_distribution<> dis(0, 1920);
+        std::uniform_real_distribution<> disV(-2, 2);
 
         // Initialize particles
         particles.clear();
         for (int i = 0; i < 1000; ++i) {
             Particle p;
             p.position = sf::Vector2f(dis(gen), dis(gen));
+            p.velocity = sf::Vector2f(disV(gen), disV(gen));
             p.shape = sf::CircleShape(2);
             p.shape.setPosition(p.position);
             particles.push_back(p);
@@ -38,11 +41,19 @@ struct Model {
     void step()
     {
         for (auto& p : particles) {
-        // Update particle position here
-        // (this is just a placeholder, you'd want to add some real physics)
-        p.position.x += 0.01f;
-        p.position.y += 0.01f;
-        p.shape.setPosition(p.position);
+            // Update particle position
+            p.position += p.velocity;
+
+            // If the particle hits the boundaries, reverse its velocity
+            if (p.position.x < 0 || p.position.x > 1920) {
+                p.velocity.x *= -1;
+            }
+            if (p.position.y < 0 || p.position.y > 1080) {
+                p.velocity.y *= -1;
+            }
+
+            // Update the particle's shape position
+            p.shape.setPosition(p.position);
         }
     }
 };
