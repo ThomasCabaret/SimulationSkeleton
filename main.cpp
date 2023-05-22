@@ -99,6 +99,7 @@ struct Model {
             p.position = sf::Vector2f(disX(gen), disY(gen));
             p.velocity = sf::Vector2f(disV(gen), disV(gen));
             p.orientation = disA(gen);
+            p.angularVelocity = 0.0;
             p.type = disType(gen);
             p.shape = sf::CircleShape(DOT_SIZE);
             p.shape.setOrigin(DOT_SIZE, DOT_SIZE);
@@ -110,26 +111,27 @@ struct Model {
     void calculateForceAndTorque(const sf::Vector2f& r, float rNorm, float orientation1, float orientation2, sf::Vector2f& force, float& torque)
     {
         // The interaction strength
-        float strengthF = 100.0f;
+        float strengthF = 10.0f;
         float strengthT = 1.0f;
 
         // Calculate the relative orientation
-        float deltaOrientation = orientation2 - orientation1;
+        float deltaOrientation = std::cos(orientation2 - orientation1);
 
         // Make sure deltaOrientation is between -pi and pi
-        while (deltaOrientation > M_PI) deltaOrientation -= 2 * M_PI;
-        while (deltaOrientation < -M_PI) deltaOrientation += 2 * M_PI;
+        //while (deltaOrientation > M_PI) deltaOrientation -= 2 * M_PI;
+        //while (deltaOrientation < -M_PI) deltaOrientation += 2 * M_PI;
 
         // Calculate the force
         // The force magnitude depends on the relative orientation
         float forceMagnitude = strengthF * deltaOrientation;
+        if (rNorm < 2.0*DOT_SIZE)
+            forceMagnitude = -10.0;
 
-        // The force direction is perpendicular to the relative position
-        force = sf::Vector2f(-r.y, r.x) * (forceMagnitude / rNorm);
+        force = r * (forceMagnitude / rNorm);
 
         // Calculate the torque
         // The torque magnitude depends on the relative orientation and the distance
-        torque = strengthT * deltaOrientation * rNorm;
+        //torque = strengthT * deltaOrientation * rNorm;
     }
 
     void step()
@@ -141,19 +143,26 @@ struct Model {
 
         // Calculate the force and torque on particle p due to all other particles
         for (auto& p : particles) {
+            p.force = sf::Vector2f(0.0, 0.0);
+            p.torque = 0.0;
             for (Particle& other : particles) {
                 if (&other != &p) {  // Avoid self-interaction
                     sf::Vector2f r = other.position - p.position;
                     float rNorm = norm(r);
                     if (rNorm < interactionRadius) {  // Consider only particles within the interaction radius
                         // Calculate force and torque using appropriate model
-                        sf::Vector2f force;
-                        float torque;
+                        sf::Vector2f force(0.0, 0.0);
+                        float torque = 0.0;
                         calculateForceAndTorque(r, rNorm, p.orientation, other.orientation, force, torque);
                         p.force += force;
                         p.torque += torque;
                     }
                 }
+                // Floc behavior
+                //p.velocity = multiply(p.velocity, 0.999);
+                //p.velocity += multiply(other.velocity, 0.0001);
+                //p.angularVelocity = p.angularVelocity * 0.999;
+                //p.angularVelocity += other.angularVelocity * 0.0001;
             }
 
             // Containing forces
@@ -177,9 +186,10 @@ struct Model {
                 normalize(p.velocity);
                 p.velocity *= maxVelocity;
             }
+            p.velocity -= multiply(p.position, 0.01);
             float maxAngularVelocity = 10.0;
             if (p.angularVelocity > maxAngularVelocity) p.angularVelocity = maxAngularVelocity;
-            if (p.angularVelocity < maxAngularVelocity) p.angularVelocity = -maxAngularVelocity;
+            if (p.angularVelocity < -maxAngularVelocity) p.angularVelocity = -maxAngularVelocity;
             p.position = p.position + p.velocity * dt;
             p.orientation = p.orientation + p.angularVelocity * dt;
 
@@ -270,7 +280,7 @@ void drawModel(sf::RenderWindow& ioWindow, const Model& iModel) {
             ioWindow.draw(lines);
         }*/
 
-        float tailLength = 5.0;
+        float tailLength = 10.0;
         sf::Vertex line[] =
         {
             sf::Vertex(p.position, sf::Color::White),
