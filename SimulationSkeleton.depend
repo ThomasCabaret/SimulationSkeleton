@@ -488,9 +488,11 @@
 	<cmath>
 	<assert.h>
 
-1684691444 source:d:\codeprojects\simulationskeleton\main.cpp
+1684769465 source:d:\codeprojects\simulationskeleton\main.cpp
 	<SFML/Graphics.hpp>
 	<vector>
 	<thread>
 	<random>
+	<cmath>
+	<iostream>
 

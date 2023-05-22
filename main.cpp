@@ -3,7 +3,7 @@
 #include <thread>
 #include <random>
 #include <cmath>
-
+#include <iostream>
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
@@ -27,6 +27,11 @@ sf::Vector2f multiply(const sf::Vector2f& vec, float scalar) {
     return sf::Vector2f(vec.x * scalar, vec.y * scalar);
 }
 
+float angleFromVector(sf::Vector2f v) {
+    return std::atan2(v.y, v.x);
+}
+
+static int K_PARTICLES = 100;
 static int WORLD_WIDTH = 1920;
 static int WORLD_HEIGTH = 1080;
 static int DOT_SIZE = 2;
@@ -87,14 +92,14 @@ struct Model {
     {
         // Initialize random number generator
         std::uniform_int_distribution<> disType(0, 15);
-        std::uniform_real_distribution<> disX(-WORLD_WIDTH/4, WORLD_WIDTH/4);
-        std::uniform_real_distribution<> disY(-WORLD_HEIGTH/4, WORLD_HEIGTH/4);
+        std::uniform_real_distribution<> disX(-WORLD_WIDTH/16, WORLD_WIDTH/16);
+        std::uniform_real_distribution<> disY(-WORLD_HEIGTH/16, WORLD_HEIGTH/16);
         std::uniform_real_distribution<> disV(-2, 2);
         std::uniform_real_distribution<> disA(0, 2.0*M_PI);
 
         // Initialize particles
         particles.clear();
-        for (int i = 0; i < 1000; ++i) {
+        for (int i = 0; i < K_PARTICLES; ++i) {
             Particle p;
             p.position = sf::Vector2f(disX(gen), disY(gen));
             p.velocity = sf::Vector2f(disV(gen), disV(gen));
@@ -115,23 +120,28 @@ struct Model {
         float strengthT = 1.0f;
 
         // Calculate the relative orientation
-        float deltaOrientation = std::cos(orientation2 - orientation1);
-
+        float deltaOrientation = orientation2 - orientation1;
+        float cosOrientation = std::cos(deltaOrientation);
+        float sinOrientation = std::sin(deltaOrientation);
+        float dirAngle = angleFromVector(r);
+        float deltaForceOrientation = orientation1-dirAngle;
+        float sinDeltaForceOrientation = std::sin(deltaForceOrientation);
         // Make sure deltaOrientation is between -pi and pi
         //while (deltaOrientation > M_PI) deltaOrientation -= 2 * M_PI;
         //while (deltaOrientation < -M_PI) deltaOrientation += 2 * M_PI;
 
         // Calculate the force
         // The force magnitude depends on the relative orientation
-        float forceMagnitude = strengthF * deltaOrientation;
+        float forceMagnitude = strengthF * cosOrientation * (sinDeltaForceOrientation * sinDeltaForceOrientation - 0.2);
+        // Solid repulsion
         if (rNorm < 2.0*DOT_SIZE)
-            forceMagnitude = -10.0;
+            forceMagnitude = -100.0;
 
         force = r * (forceMagnitude / rNorm);
 
         // Calculate the torque
         // The torque magnitude depends on the relative orientation and the distance
-        //torque = strengthT * deltaOrientation * rNorm;
+        //torque = strengthT * sinOrientation * rNorm;
     }
 
     void step()
@@ -186,7 +196,8 @@ struct Model {
                 normalize(p.velocity);
                 p.velocity *= maxVelocity;
             }
-            p.velocity -= multiply(p.position, 0.01);
+            p.velocity -= multiply(p.position, 0.001);
+            p.velocity = multiply(p.velocity, 0.99);
             float maxAngularVelocity = 10.0;
             if (p.angularVelocity > maxAngularVelocity) p.angularVelocity = maxAngularVelocity;
             if (p.angularVelocity < -maxAngularVelocity) p.angularVelocity = -maxAngularVelocity;
@@ -287,6 +298,14 @@ void drawModel(sf::RenderWindow& ioWindow, const Model& iModel) {
             sf::Vertex(p.position + tailLength*sf::Vector2f(std::cos(p.orientation), std::sin(p.orientation)), sf::Color::White)
         };
 
+        //Force debug
+        //sf::Vertex lineF[] =
+        //{
+        //    sf::Vertex(p.position, sf::Color::Red),
+        //    sf::Vertex(p.position + p.force, sf::Color::Red)
+        //};
+        //ioWindow.draw(lineF, 2, sf::Lines);
+
         ioWindow.draw(line, 2, sf::Lines);
         ioWindow.draw(p.shape);
     }
@@ -295,6 +314,9 @@ void drawModel(sf::RenderWindow& ioWindow, const Model& iModel) {
 // Main function
 int main()
 {
+    // Test
+    //std::cout << angleFromVector(sf::Vector2f(-1.0,-2.0)) << std::endl;
+
     // Create the main window
     sf::RenderWindow window(sf::VideoMode(WORLD_WIDTH, WORLD_HEIGTH), "Particle system");
 
