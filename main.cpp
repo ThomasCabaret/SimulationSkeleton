@@ -9,7 +9,7 @@
 #endif
 
 
-static int K_PARTICLES = 1000;
+static int K_PARTICLES = 300;
 static int WORLD_WIDTH = 1920;
 static int WORLD_HEIGTH = 1080;
 static int DOT_SIZE = 2;
@@ -130,7 +130,7 @@ struct Model {
         // The interaction strength
         float strengthF = 0.2f;
         float strengthT = 0.2f;
-        float teta = 0.1f;
+        float teta = 0.15f;
 
         //Compute poles locations of the other particle
         sf::Vector2f aRVect2 = unitVectorFromAngle(orientation2+teta/2.0+M_PI/2.0);
@@ -139,13 +139,14 @@ struct Model {
         sf::Vector2f aLPole2 = pos2 + 5.0f * aLVect2;
         float DR = norm(aRPole2 - pos1);
         float DL = norm(aLPole2 - pos1);
+        float repFactor = rNorm < 5.0 ? 30.0f : 1.0f;
         if (DR < DL)
         {
-            dv = strengthF/(DR+1.0f)*(aRPole2 - pos1)/DR;
+            dv = repFactor*strengthF/(DR+1.0f)*(aRPole2 - pos1)/DR;
         }
         else
         {
-            dv = strengthF/(DL+1.0f)*(aLPole2 - pos1)/DL;
+            dv = repFactor*strengthF/(DL+1.0f)*(aLPole2 - pos1)/DL;
         }
 
         float deltaOrientation = orientation2 - orientation1;
@@ -157,7 +158,6 @@ struct Model {
         {
             deltaOrientation -= teta;
         }
-
         // Make sure deltaOrientation is between -pi and pi
         while (deltaOrientation > M_PI) deltaOrientation -= 2 * M_PI;
         while (deltaOrientation < -M_PI) deltaOrientation += 2 * M_PI;
@@ -200,13 +200,13 @@ struct Model {
 
         // Calculate the torque
         // The torque magnitude depends on the relative orientation and the distance
-        //torque = strengthT * sinOrientation * rNorm;
+        torque = strengthT * sinOrientation * rNorm;
     }
 
     void step()
     {
         //const float attractionStrength = 0.05f;
-        const float interactionRadius = 6.0f;
+        const float interactionRadius = 30.0f;
         //const float attractionMinThreshold = 5.0f;
         //const float linkingThreshold = 30.0f;
 
@@ -220,23 +220,23 @@ struct Model {
                     float rNorm = norm(r);
                     if (rNorm < interactionRadius) {  // Consider only particles within the interaction radius
                         // Calculate force and torque using appropriate model
-                        //sf::Vector2f force(0.0, 0.0);
-                        //float torque = 0.0;
-                        //calculateForceAndTorque(r, rNorm, p.orientation, other.orientation, force, torque);
-                        //p.force += force;
-                        //p.torque += torque;
+                        sf::Vector2f force(0.0, 0.0);
+                        float torque = 0.0;
+                        calculateForceAndTorque(r, rNorm, p.orientation, other.orientation, force, torque);
+                        p.force += force;
+                        p.torque += torque;
 
-                        sf::Vector2f dv(0.0, 0.0);
-                        float dva = 0.0;
-                        calculateDV_fattyAcid1(p.position, other.position,
-                                               p.orientation, other.orientation,
-                                               r, rNorm,
-                                               dv, dva);
-                        p.velocity += dv;
-                        p.angularVelocity += dva;
+                        //sf::Vector2f dv(0.0, 0.0);
+                        //float dva = 0.0;
+                        //calculateDV_fattyAcid1(p.position, other.position,
+                        //                       p.orientation, other.orientation,
+                        //                       r, rNorm,
+                        //                       dv, dva);
+                        //p.velocity += dv;
+                        //p.angularVelocity += dva;
 
                         if (rNorm < 2.0*DOT_SIZE)
-                            p.force += r * (-1.0f / rNorm);
+                            p.force += r * (-100.0f / rNorm);
                     }
                 }
                 // Floc behavior
@@ -267,9 +267,11 @@ struct Model {
                 normalize(p.velocity);
                 p.velocity *= maxVelocity;
             }
+            //Force attract to center to incentive interactions
             p.velocity -= multiply(p.position, 0.01);
-            p.velocity = multiply(p.velocity, 0.99);
-            p.angularVelocity *= 0.98;
+            //Sticky dissipative space and other limits
+            p.velocity = multiply(p.velocity, 0.90);
+            p.angularVelocity *= 0.96;
             float maxAngularVelocity = 10.0;
             if (p.angularVelocity > maxAngularVelocity) p.angularVelocity = maxAngularVelocity;
             if (p.angularVelocity < -maxAngularVelocity) p.angularVelocity = -maxAngularVelocity;
@@ -290,64 +292,6 @@ struct Model {
             p.shape.setPosition(p.position);
             p.shape.setFillColor(getColor(p.type));
         }
-
-            // sort by distance
-            //std::sort(neighbors.begin(), neighbors.end());
-
-            //int nCount = 0;
-            //int dCut = 8;
-            //for (auto& pair : neighbors) {
-            //    nCount++;
-            //    float distance = pair.first;
-            //    Particle* other = pair.second;
-
-            //    sf::Vector2f delta = other->position - p.position;
-            //    delta /= distance; // Normalize delta
-            //    float f = 1.0*(dCut-(nCount-1.0))/dCut;
-            //    if (f < -0.2) f = -0.2;
-            //    if (distance > attractionMinThreshold) {
-            //        p.velocity += f * delta * attractionStrength;
-            //    } else {
-            //        float rep = 0.2;
-            //        p.velocity -= rep * delta * attractionStrength;
-            //    }
-                //if (nCount >= dCut){
-                //    p.velocity -= delta * attractionStrength;
-                //}
-
-                // Floc behavior
-            //    p.velocity = multiply(p.velocity, 0.999);
-            //    p.velocity += multiply(other->velocity, 0.0001);
-            //}
-
-            //std::uniform_real_distribution<> disPV(-0.1, 0.1);
-            //p.velocity += sf::Vector2f(disPV(gen),disPV(gen));
-
-            //p.velocity -= multiply(p.position, 0.001);
-
-            //if (norm(p.velocity) < 1.0) {
-            //    normalize(p.velocity);
-            //}
-
-            //if (norm(p.velocity) > 2.0) {
-            //    p.velocity = multiply(p.velocity, 0.9);
-            //}
-
-            // Apply force
-            //for (auto& other : p.linked) {
-            //    sf::Vector2f delta = other->position - p.position;
-            //    float distance = std::sqrt(delta.x*delta.x + delta.y*delta.y);
-            //    delta /= distance; // Normalize delta
-            //    p.velocity += delta * attractionStrength;
-            //}
-            //normalize(p.velocity);
-
-            // TODO Torus world is problematic to draw lines between points
-            // Torus world
-            //if (p.position.x > WORLD_WIDTH/2) p.position.x -= WORLD_WIDTH;
-            //if (p.position.x < -WORLD_WIDTH/2) p.position.x += WORLD_WIDTH;
-            //if (p.position.y > WORLD_HEIGTH/2) p.position.y -= WORLD_HEIGTH;
-            //if (p.position.y < -WORLD_HEIGTH/2) p.position.y += WORLD_HEIGTH;
     }
 };
 
