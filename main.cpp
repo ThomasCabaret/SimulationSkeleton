@@ -128,13 +128,15 @@ struct Model {
                                 float& dva)
     {
         // The interaction strength
-        float strengthF = 1.0f;
-        float strengthT = 1.0f;
+        float strengthF = 0.2f;
+        float strengthT = 0.2f;
+        float teta = 0.1f;
 
         //Compute poles locations of the other particle
-        sf::Vector2f aRVect = unitVectorFromAngle(orientation2+M_PI/2.0);
-        sf::Vector2f aRPole2 = pos2 + 4.0f * aRVect;
-        sf::Vector2f aLPole2 = pos2 - 4.0f * aRVect;
+        sf::Vector2f aRVect2 = unitVectorFromAngle(orientation2+teta/2.0+M_PI/2.0);
+        sf::Vector2f aRPole2 = pos2 + 5.0f * aRVect2;
+        sf::Vector2f aLVect2 = unitVectorFromAngle(orientation2-teta/2.0-M_PI/2.0);
+        sf::Vector2f aLPole2 = pos2 + 5.0f * aLVect2;
         float DR = norm(aRPole2 - pos1);
         float DL = norm(aLPole2 - pos1);
         if (DR < DL)
@@ -146,7 +148,6 @@ struct Model {
             dv = strengthF/(DL+1.0f)*(aLPole2 - pos1)/DL;
         }
 
-        float teta = 0.1f;
         float deltaOrientation = orientation2 - orientation1;
         if (DR < DL)
         {
@@ -193,7 +194,7 @@ struct Model {
         float forceMagnitude = strengthF * cosOrientation * (sinDeltaForceOrientation * sinDeltaForceOrientation - 0.2);
         // Solid repulsion
         if (rNorm < 2.0*DOT_SIZE)
-            forceMagnitude = -100.0;
+            forceMagnitude = -1000.0;
 
         force = r * (forceMagnitude / rNorm);
 
@@ -205,7 +206,7 @@ struct Model {
     void step()
     {
         //const float attractionStrength = 0.05f;
-        const float interactionRadius = 7.0f;
+        const float interactionRadius = 6.0f;
         //const float attractionMinThreshold = 5.0f;
         //const float linkingThreshold = 30.0f;
 
@@ -235,7 +236,7 @@ struct Model {
                         p.angularVelocity += dva;
 
                         if (rNorm < 2.0*DOT_SIZE)
-                            p.force += r * (-100.0f / rNorm);
+                            p.force += r * (-1.0f / rNorm);
                     }
                 }
                 // Floc behavior
@@ -268,7 +269,7 @@ struct Model {
             }
             p.velocity -= multiply(p.position, 0.01);
             p.velocity = multiply(p.velocity, 0.99);
-            p.angularVelocity *= 0.99;
+            p.angularVelocity *= 0.98;
             float maxAngularVelocity = 10.0;
             if (p.angularVelocity > maxAngularVelocity) p.angularVelocity = maxAngularVelocity;
             if (p.angularVelocity < -maxAngularVelocity) p.angularVelocity = -maxAngularVelocity;
@@ -377,8 +378,36 @@ void drawModel(sf::RenderWindow& ioWindow, const Model& iModel) {
         //};
         //ioWindow.draw(lineF, 2, sf::Lines);
 
+
+        //Speed debug
+        //sf::Vertex lineV[] =
+        //{
+        //    sf::Vertex(p.position, sf::Color::Green),
+        //    sf::Vertex(p.position + 10.0f*p.velocity, sf::Color::Green)
+        //};
+        //ioWindow.draw(lineV, 2, sf::Lines);
+
         ioWindow.draw(line, 2, sf::Lines);
         ioWindow.draw(p.shape);
+
+        //Pole debug
+        /*
+        float teta = 1.5;
+        sf::Vector2f aRVect = unitVectorFromAngle(p.orientation+teta/2.0+M_PI/2.0);
+        sf::Vector2f aRPole = p.position + 5.0f * aRVect;
+        sf::Vector2f aLVect = unitVectorFromAngle(p.orientation-teta/2.0-M_PI/2.0);
+        sf::Vector2f aLPole = p.position + 5.0f * aLVect;
+        sf::CircleShape aRPoleDot(1);
+        aRPoleDot.setOrigin(1, 1);
+        aRPoleDot.setPosition(aRPole);
+        sf::CircleShape aLPoleDot(1);
+        aLPoleDot.setOrigin(1, 1);
+        aLPoleDot.setPosition(aLPole);
+        aRPoleDot.setFillColor(sf::Color::Red);
+        aLPoleDot.setFillColor(sf::Color::Red);
+        ioWindow.draw(aRPoleDot);
+        ioWindow.draw(aLPoleDot);
+        */
     }
 }
 
