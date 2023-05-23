@@ -8,6 +8,13 @@
 #define M_PI 3.14159265358979323846
 #endif
 
+
+static int K_PARTICLES = 1000;
+static int WORLD_WIDTH = 1920;
+static int WORLD_HEIGTH = 1080;
+static int DOT_SIZE = 2;
+static sf::Vector2f DOT_OFSET = sf::Vector2f(DOT_SIZE, DOT_SIZE);
+
 // Simple struct to hold particle data
 struct Particle {
     sf::Vector2f position;
@@ -31,11 +38,9 @@ float angleFromVector(sf::Vector2f v) {
     return std::atan2(v.y, v.x);
 }
 
-static int K_PARTICLES = 100;
-static int WORLD_WIDTH = 1920;
-static int WORLD_HEIGTH = 1080;
-static int DOT_SIZE = 2;
-static sf::Vector2f DOT_OFSET = sf::Vector2f(DOT_SIZE, DOT_SIZE);
+sf::Vector2f unitVectorFromAngle(float iAngle) {
+    return sf::Vector2f(std::cos(iAngle), std::sin(iAngle));
+}
 
 float norm(const sf::Vector2f& vec) {
     return std::sqrt(vec.x * vec.x + vec.y * vec.y);
@@ -113,6 +118,59 @@ struct Model {
         }
     }
 
+    void calculateDV_fattyAcid1(const sf::Vector2f& pos1,
+                                const sf::Vector2f& pos2,
+                                float orientation1,
+                                float orientation2,
+                                const sf::Vector2f& r,
+                                float rNorm,
+                                sf::Vector2f& dv,
+                                float& dva)
+    {
+        // The interaction strength
+        float strengthF = 1.0f;
+        float strengthT = 1.0f;
+
+        //Compute poles locations of the other particle
+        sf::Vector2f aRVect = unitVectorFromAngle(orientation2+M_PI/2.0);
+        sf::Vector2f aRPole2 = pos2 + 4.0f * aRVect;
+        sf::Vector2f aLPole2 = pos2 - 4.0f * aRVect;
+        float DR = norm(aRPole2 - pos1);
+        float DL = norm(aLPole2 - pos1);
+        if (DR < DL)
+        {
+            dv = strengthF/(DR+1.0f)*(aRPole2 - pos1)/DR;
+        }
+        else
+        {
+            dv = strengthF/(DL+1.0f)*(aLPole2 - pos1)/DL;
+        }
+
+        float teta = 0.1f;
+        float deltaOrientation = orientation2 - orientation1;
+        if (DR < DL)
+        {
+            deltaOrientation += teta;
+        }
+        else
+        {
+            deltaOrientation -= teta;
+        }
+
+        // Make sure deltaOrientation is between -pi and pi
+        while (deltaOrientation > M_PI) deltaOrientation -= 2 * M_PI;
+        while (deltaOrientation < -M_PI) deltaOrientation += 2 * M_PI;
+
+        if (deltaOrientation > 0)
+        {
+            dva = strengthT;
+        }
+        else
+        {
+            dva = -strengthT;
+        }
+    }
+
     void calculateForceAndTorque(const sf::Vector2f& r, float rNorm, float orientation1, float orientation2, sf::Vector2f& force, float& torque)
     {
         // The interaction strength
@@ -147,7 +205,7 @@ struct Model {
     void step()
     {
         //const float attractionStrength = 0.05f;
-        const float interactionRadius = 30.0f;
+        const float interactionRadius = 7.0f;
         //const float attractionMinThreshold = 5.0f;
         //const float linkingThreshold = 30.0f;
 
@@ -161,11 +219,23 @@ struct Model {
                     float rNorm = norm(r);
                     if (rNorm < interactionRadius) {  // Consider only particles within the interaction radius
                         // Calculate force and torque using appropriate model
-                        sf::Vector2f force(0.0, 0.0);
-                        float torque = 0.0;
-                        calculateForceAndTorque(r, rNorm, p.orientation, other.orientation, force, torque);
-                        p.force += force;
-                        p.torque += torque;
+                        //sf::Vector2f force(0.0, 0.0);
+                        //float torque = 0.0;
+                        //calculateForceAndTorque(r, rNorm, p.orientation, other.orientation, force, torque);
+                        //p.force += force;
+                        //p.torque += torque;
+
+                        sf::Vector2f dv(0.0, 0.0);
+                        float dva = 0.0;
+                        calculateDV_fattyAcid1(p.position, other.position,
+                                               p.orientation, other.orientation,
+                                               r, rNorm,
+                                               dv, dva);
+                        p.velocity += dv;
+                        p.angularVelocity += dva;
+
+                        if (rNorm < 2.0*DOT_SIZE)
+                            p.force += r * (-100.0f / rNorm);
                     }
                 }
                 // Floc behavior
@@ -196,8 +266,9 @@ struct Model {
                 normalize(p.velocity);
                 p.velocity *= maxVelocity;
             }
-            p.velocity -= multiply(p.position, 0.001);
+            p.velocity -= multiply(p.position, 0.01);
             p.velocity = multiply(p.velocity, 0.99);
+            p.angularVelocity *= 0.99;
             float maxAngularVelocity = 10.0;
             if (p.angularVelocity > maxAngularVelocity) p.angularVelocity = maxAngularVelocity;
             if (p.angularVelocity < -maxAngularVelocity) p.angularVelocity = -maxAngularVelocity;
@@ -295,7 +366,7 @@ void drawModel(sf::RenderWindow& ioWindow, const Model& iModel) {
         sf::Vertex line[] =
         {
             sf::Vertex(p.position, sf::Color::White),
-            sf::Vertex(p.position + tailLength*sf::Vector2f(std::cos(p.orientation), std::sin(p.orientation)), sf::Color::White)
+            sf::Vertex(p.position + tailLength*unitVectorFromAngle(p.orientation), sf::Color::White)
         };
 
         //Force debug
