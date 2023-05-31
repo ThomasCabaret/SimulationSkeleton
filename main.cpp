@@ -9,7 +9,7 @@
 #endif
 
 
-static int K_PARTICLES = 300;
+static int K_PARTICLES = 100;
 static int WORLD_WIDTH = 1920;
 static int WORLD_HEIGTH = 1080;
 static int DOT_SIZE = 2;
@@ -40,6 +40,22 @@ float angleFromVector(sf::Vector2f v) {
 
 sf::Vector2f unitVectorFromAngle(float iAngle) {
     return sf::Vector2f(std::cos(iAngle), std::sin(iAngle));
+}
+
+float colinearFactor(sf::Vector2f v1, sf::Vector2f v2) {
+    float dotProduct = v1.x * v2.x + v1.y * v2.y;
+    float lengthsProduct = std::sqrt(v1.x * v1.x + v1.y * v1.y) * std::sqrt(v2.x * v2.x + v2.y * v2.y);
+
+    // prevent division by zero
+    if(lengthsProduct == 0.f)
+        return 0.f;
+
+    float cosineOfAngle = dotProduct / lengthsProduct;
+
+    // Clamp the value to the [-1, 1] range, in case of numerical instability
+    cosineOfAngle = std::max(-1.f, std::min(1.f, cosineOfAngle));
+
+    return cosineOfAngle;
 }
 
 float norm(const sf::Vector2f& vec) {
@@ -118,6 +134,7 @@ struct Model {
         }
     }
 
+    /*
     void calculateDV_fattyAcid1(const sf::Vector2f& pos1,
                                 const sf::Vector2f& pos2,
                                 float orientation1,
@@ -171,7 +188,78 @@ struct Model {
             dva = -strengthT;
         }
     }
+    */
 
+    void calculateForceAndTorque_fattyAcid1(const sf::Vector2f& pos1,
+                                            const sf::Vector2f& pos2,
+                                            float orientation1,
+                                            float orientation2,
+                                            const sf::Vector2f& r,
+                                            float rNorm,
+                                            sf::Vector2f& oForce,
+                                            float& oTorque)
+    {
+        // The interaction strength
+        float strengthF = 1.0f;
+        float strengthT = 1.0f;
+        float teta = 0.15f;
+
+        //Compute poles locations of the other particle
+        sf::Vector2f aRVect2 = unitVectorFromAngle(orientation2+teta/2.0+M_PI/2.0);
+        sf::Vector2f aRPole2 = pos2 + 5.0f * aRVect2;
+        sf::Vector2f aLVect2 = unitVectorFromAngle(orientation2-teta/2.0-M_PI/2.0);
+        sf::Vector2f aLPole2 = pos2 + 5.0f * aLVect2;
+        float DR = norm(aRPole2 - pos1);
+        float DL = norm(aLPole2 - pos1);
+        float repFactor = rNorm < 5.0 ? 30.0f : 1.0f;
+        if (DR < DL)
+        {
+            float colFactor = colinearFactor(aRPole2 - pos1, unitVectorFromAngle(orientation2));
+            float anisoFactor = 0.001*colFactor*colFactor*1000.0+1.0; //x times more force when "inserting"
+            oForce = anisoFactor*repFactor*strengthF/(DR+1.0f)*(aRPole2 - pos1)/DR;
+        }
+        else
+        {
+            float colFactor = colinearFactor(aLPole2 - pos1, unitVectorFromAngle(orientation2));
+            float anisoFactor = 0.001*colFactor*colFactor*1000.0+1.0; //x times more force when "inserting"
+            oForce = anisoFactor*repFactor*strengthF/(DL+1.0f)*(aLPole2 - pos1)/DL;
+        }
+
+        float deltaOrientation = orientation2 - orientation1;
+        if (DR < DL)
+        {
+            deltaOrientation += teta;
+        }
+        else
+        {
+            deltaOrientation -= teta;
+        }
+        // Make sure deltaOrientation is between -pi and pi
+        while (deltaOrientation > M_PI) deltaOrientation -= 2 * M_PI;
+        while (deltaOrientation < -M_PI) deltaOrientation += 2 * M_PI;
+
+        if (deltaOrientation > 0)
+        {
+            oTorque = strengthT;
+        }
+        else
+        {
+            oTorque = -strengthT;
+        }
+
+        //Torque influence as well diminish with distance
+        if (DR < DL)
+        {
+            oTorque = oTorque/(DR+1.0f);
+        }
+        else
+        {
+            oTorque = oTorque/(DL+1.0f);
+        }
+
+    }
+
+/*
     void calculateForceAndTorque(const sf::Vector2f& r, float rNorm, float orientation1, float orientation2, sf::Vector2f& force, float& torque)
     {
         // The interaction strength
@@ -202,11 +290,12 @@ struct Model {
         // The torque magnitude depends on the relative orientation and the distance
         torque = strengthT * sinOrientation * rNorm;
     }
+*/
 
     void step()
     {
         //const float attractionStrength = 0.05f;
-        const float interactionRadius = 30.0f;
+        const float interactionRadius = 8.0f;
         //const float attractionMinThreshold = 5.0f;
         //const float linkingThreshold = 30.0f;
 
@@ -222,7 +311,11 @@ struct Model {
                         // Calculate force and torque using appropriate model
                         sf::Vector2f force(0.0, 0.0);
                         float torque = 0.0;
-                        calculateForceAndTorque(r, rNorm, p.orientation, other.orientation, force, torque);
+                        //Force model for vesicle formation
+                        calculateForceAndTorque_fattyAcid1(p.position, other.position,
+                                                           p.orientation, other.orientation,
+                                                           r, rNorm,
+                                                           force, torque);
                         p.force += force;
                         p.torque += torque;
 
@@ -235,6 +328,7 @@ struct Model {
                         //p.velocity += dv;
                         //p.angularVelocity += dva;
 
+                        //Solid repulsion
                         if (rNorm < 2.0*DOT_SIZE)
                             p.force += r * (-100.0f / rNorm);
                     }
@@ -268,10 +362,10 @@ struct Model {
                 p.velocity *= maxVelocity;
             }
             //Force attract to center to incentive interactions
-            p.velocity -= multiply(p.position, 0.01);
+            p.velocity -= multiply(p.position, 0.0001);
             //Sticky dissipative space and other limits
-            p.velocity = multiply(p.velocity, 0.90);
-            p.angularVelocity *= 0.96;
+            p.velocity = multiply(p.velocity, 0.98);
+            p.angularVelocity *= 0.98;
             float maxAngularVelocity = 10.0;
             if (p.angularVelocity > maxAngularVelocity) p.angularVelocity = maxAngularVelocity;
             if (p.angularVelocity < -maxAngularVelocity) p.angularVelocity = -maxAngularVelocity;
