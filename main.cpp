@@ -4,15 +4,17 @@
 #include <random>
 #include <cmath>
 #include <iostream>
+#include <cassert>
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
 
 
-static int K_PARTICLES = 100;
+static int K_PARTICLES = 64;
 static int WORLD_WIDTH = 1920;
 static int WORLD_HEIGTH = 1080;
 static int DOT_SIZE = 2;
+static int K_NB_TYPE = 2;
 static sf::Vector2f DOT_OFSET = sf::Vector2f(DOT_SIZE, DOT_SIZE);
 
 // Simple struct to hold particle data
@@ -24,7 +26,7 @@ struct Particle {
     sf::Vector2f force;
     float torque;
     int type;
-    //std::vector<Particle*> linked;
+    std::vector<Particle*> linked;
     //Having view relating object in the model object is not ideal
     //but in SFML not rebuilding the graphical object is significantly faster
     sf::CircleShape shape;
@@ -70,7 +72,7 @@ void normalize(sf::Vector2f& vec)
 
 sf::Color getColor(int type) {
     // Convert the type to a hue value between 0 and 360 degrees
-    float hue = (type % 16) * (360.0f / 16.0f);
+    float hue = (type % K_NB_TYPE) * (360.0f / 16.0f);
 
     // For simplicity, we'll keep saturation and lightness constant
     float saturation = 1.0f;
@@ -100,7 +102,7 @@ sf::Color getColor(int type) {
 }
 
 struct Model {
-    std::vector<Particle> particles;
+    std::vector<Particle> particles; //BAD choice of container if dynamic
     std::random_device rd;
     std::mt19937 gen;
 
@@ -112,7 +114,7 @@ struct Model {
     void init()
     {
         // Initialize random number generator
-        std::uniform_int_distribution<> disType(0, 15);
+        std::uniform_int_distribution<> disType(0, K_NB_TYPE-1);
         std::uniform_real_distribution<> disX(-WORLD_WIDTH/16, WORLD_WIDTH/16);
         std::uniform_real_distribution<> disY(-WORLD_HEIGTH/16, WORLD_HEIGTH/16);
         std::uniform_real_distribution<> disV(-2, 2);
@@ -120,17 +122,24 @@ struct Model {
 
         // Initialize particles
         particles.clear();
+        particles.reserve(K_PARTICLES); //BAD choice of container if dynamic
         for (int i = 0; i < K_PARTICLES; ++i) {
             Particle p;
             p.position = sf::Vector2f(disX(gen), disY(gen));
             p.velocity = sf::Vector2f(disV(gen), disV(gen));
             p.orientation = disA(gen);
             p.angularVelocity = 0.0;
-            p.type = disType(gen);
+            p.type = i % 2;//disType(gen);
             p.shape = sf::CircleShape(DOT_SIZE);
             p.shape.setOrigin(DOT_SIZE, DOT_SIZE);
             p.shape.setPosition(p.position);
             particles.push_back(p);
+
+            //build pairs of particles
+            if (i % 2 == 1) {
+                particles[i].linked.push_back(&particles[i-1]);
+                particles[i-1].linked.push_back(&particles[i]);
+            }
         }
     }
 
@@ -216,13 +225,15 @@ struct Model {
         {
             float colFactor = colinearFactor(aRPole2 - pos1, unitVectorFromAngle(orientation2));
             float anisoFactor = 0.001*colFactor*colFactor*1000.0+1.0; //x times more force when "inserting"
-            oForce = anisoFactor*repFactor*strengthF/(DR+1.0f)*(aRPole2 - pos1)/DR;
+            float distanceFactor = 1.0/((DR+1.0f)*(DR+1.0f)*(DR+1.0f));
+            oForce = anisoFactor*repFactor*distanceFactor*strengthF*(aRPole2 - pos1);
         }
         else
         {
             float colFactor = colinearFactor(aLPole2 - pos1, unitVectorFromAngle(orientation2));
             float anisoFactor = 0.001*colFactor*colFactor*1000.0+1.0; //x times more force when "inserting"
-            oForce = anisoFactor*repFactor*strengthF/(DL+1.0f)*(aLPole2 - pos1)/DL;
+            float distanceFactor = 1.0/((DL+1.0f)*(DL+1.0f)*(DL+1.0f));
+            oForce = anisoFactor*repFactor*distanceFactor*strengthF*(aLPole2 - pos1);
         }
 
         float deltaOrientation = orientation2 - orientation1;
@@ -257,6 +268,14 @@ struct Model {
             oTorque = oTorque/(DL+1.0f);
         }
 
+    }
+
+    void calculateForce_linearAttraction(float forceMagnitude, const sf::Vector2f& r, float rNorm, sf::Vector2f& force) {
+        force = r * (forceMagnitude / rNorm);
+    }
+
+    void calculateForce_quadraticAttraction(float forceMagnitude, const sf::Vector2f& r, float rNorm, sf::Vector2f& force) {
+        force = r * (forceMagnitude / (rNorm*rNorm));
     }
 
 /*
@@ -295,14 +314,17 @@ struct Model {
     void step()
     {
         //const float attractionStrength = 0.05f;
-        const float interactionRadius = 8.0f;
+        const float interactionRadius = 10.0f;
         //const float attractionMinThreshold = 5.0f;
         //const float linkingThreshold = 30.0f;
 
         // Calculate the force and torque on particle p due to all other particles
         for (auto& p : particles) {
+
             p.force = sf::Vector2f(0.0, 0.0);
             p.torque = 0.0;
+
+            //General forces with any other particles
             for (Particle& other : particles) {
                 if (&other != &p) {  // Avoid self-interaction
                     sf::Vector2f r = other.position - p.position;
@@ -312,10 +334,15 @@ struct Model {
                         sf::Vector2f force(0.0, 0.0);
                         float torque = 0.0;
                         //Force model for vesicle formation
-                        calculateForceAndTorque_fattyAcid1(p.position, other.position,
-                                                           p.orientation, other.orientation,
-                                                           r, rNorm,
-                                                           force, torque);
+                        //calculateForceAndTorque_fattyAcid1(p.position, other.position,
+                        //                                   p.orientation, other.orientation,
+                        //                                   r, rNorm,
+                        //                                   force, torque);
+
+                        if (p.type == 0 && other.type == 0) {
+                            calculateForce_quadraticAttraction(40.0f, r, rNorm, force);
+                        }
+
                         p.force += force;
                         p.torque += torque;
 
@@ -330,7 +357,7 @@ struct Model {
 
                         //Solid repulsion
                         if (rNorm < 2.0*DOT_SIZE)
-                            p.force += r * (-100.0f / rNorm);
+                            p.force += r * (-300.0f / rNorm);
                     }
                 }
                 // Floc behavior
@@ -338,6 +365,22 @@ struct Model {
                 //p.velocity += multiply(other.velocity, 0.0001);
                 //p.angularVelocity = p.angularVelocity * 0.999;
                 //p.angularVelocity += other.angularVelocity * 0.0001;
+            }
+
+            //Link forces
+            assert(p.linked.size() <= 1);
+            for (Particle* otherLinked : p.linked) {
+                if (otherLinked != &p) {  // Avoid self-interaction
+                    sf::Vector2f r = otherLinked->position - p.position;
+                    float rNorm = norm(r);
+                    // Calculate force and torque using appropriate model
+                    sf::Vector2f force(0.0, 0.0);
+                    float torque = 0.0;
+                    //Force model for vesicle formation
+                    calculateForce_linearAttraction(20.0f, r, rNorm, force);
+                    p.force += force;
+                    p.torque += torque;
+                }
             }
 
             // Containing forces
@@ -392,21 +435,24 @@ struct Model {
 void drawModel(sf::RenderWindow& ioWindow, const Model& iModel) {
     for (const auto& p : iModel.particles)
     {
-        /*for (auto& other : p.linked) {
-            sf::VertexArray lines(sf::Lines, 2);
-            lines[0].position = p.position + DOT_OFSET;
-            lines[1].position = other->position + DOT_OFSET;
-            lines[0].color = sf::Color::White;
-            lines[1].color = sf::Color::White;
-            ioWindow.draw(lines);
-        }*/
+        sf::VertexArray lines(sf::Lines, 2);
+        for (auto& other : p.linked) {
+            lines[0].position = p.position;
+            lines[1].position = other->position;
+            lines[0].color = sf::Color::Green;
+            lines[1].color = sf::Color::Green;
+            //ioWindow.draw(lines);
+        }
 
+        /*
         float tailLength = 10.0;
         sf::Vertex line[] =
         {
             sf::Vertex(p.position, sf::Color::White),
             sf::Vertex(p.position + tailLength*unitVectorFromAngle(p.orientation), sf::Color::White)
         };
+        ioWindow.draw(line, 2, sf::Lines);
+        */
 
         //Force debug
         //sf::Vertex lineF[] =
@@ -425,8 +471,8 @@ void drawModel(sf::RenderWindow& ioWindow, const Model& iModel) {
         //};
         //ioWindow.draw(lineV, 2, sf::Lines);
 
-        ioWindow.draw(line, 2, sf::Lines);
         ioWindow.draw(p.shape);
+        ioWindow.draw(lines);
 
         //Pole debug
         /*
