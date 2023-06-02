@@ -14,7 +14,7 @@ static int K_PARTICLES = 64;
 static int WORLD_WIDTH = 1920;
 static int WORLD_HEIGTH = 1080;
 static int DOT_SIZE = 2;
-static int K_NB_TYPE = 2;
+static int K_NB_TYPE = 16;
 static sf::Vector2f DOT_OFSET = sf::Vector2f(DOT_SIZE, DOT_SIZE);
 
 // Simple struct to hold particle data
@@ -26,7 +26,7 @@ struct Particle {
     sf::Vector2f force;
     float torque;
     int type;
-    std::vector<Particle*> linked;
+    //std::vector<Particle*> linked;
     //Having view relating object in the model object is not ideal
     //but in SFML not rebuilding the graphical object is significantly faster
     sf::CircleShape shape;
@@ -129,17 +129,17 @@ struct Model {
             p.velocity = sf::Vector2f(disV(gen), disV(gen));
             p.orientation = disA(gen);
             p.angularVelocity = 0.0;
-            p.type = i % 2;//disType(gen);
+            p.type = disType(gen);
             p.shape = sf::CircleShape(DOT_SIZE);
             p.shape.setOrigin(DOT_SIZE, DOT_SIZE);
             p.shape.setPosition(p.position);
             particles.push_back(p);
 
             //build pairs of particles
-            if (i % 2 == 1) {
-                particles[i].linked.push_back(&particles[i-1]);
-                particles[i-1].linked.push_back(&particles[i]);
-            }
+            //if (i % 2 == 1) {
+            //    particles[i].linked.push_back(&particles[i-1]);
+            //    particles[i-1].linked.push_back(&particles[i]);
+            //}
         }
     }
 
@@ -278,6 +278,35 @@ struct Model {
         force = r * (forceMagnitude / (rNorm*rNorm));
     }
 
+    void calculateForceAndTorque_dipole(const sf::Vector2f& r,
+                                        float rNorm,
+                                        float orientation1,
+                                        float orientation2,
+                                        sf::Vector2f& oForce,
+                                        float& oTorque) {
+
+        // Construct orientation vectors
+        sf::Vector2f u1 = unitVectorFromAngle(orientation1);
+        sf::Vector2f u2 = unitVectorFromAngle(orientation2);
+
+        // Compute needed quantities
+        float cosTheta1 = u1.x * r.x + u1.y * r.y / rNorm;
+        float cosTheta2 = u2.x * r.x + u2.y * r.y / rNorm;
+        float cosTheta12 = u1.x * u2.x + u1.y * u2.y;
+        //float r5 = rNorm;// * rNorm * rNorm * rNorm * rNorm;
+
+        // Compute force
+sf::Vector2f force = (3.0f * cosTheta1 * cosTheta2 - cosTheta12) * r / (rNorm);
+force += (cosTheta1 * u2 + cosTheta2 * u1 - 2 * cosTheta1 * cosTheta2 * r) / (rNorm * rNorm * rNorm);
+
+        // Compute torque
+        float torque = u1.x * u2.y - u1.y * u2.x - 3 * cosTheta1 * (u1.x * r.y - u1.y * r.x) / rNorm;
+
+        // Assign output
+        oForce = force;
+        oTorque = torque;
+    }
+
 /*
     void calculateForceAndTorque(const sf::Vector2f& r, float rNorm, float orientation1, float orientation2, sf::Vector2f& force, float& torque)
     {
@@ -339,9 +368,10 @@ struct Model {
                         //                                   r, rNorm,
                         //                                   force, torque);
 
-                        if (p.type == 0 && other.type == 0) {
-                            calculateForce_quadraticAttraction(40.0f, r, rNorm, force);
-                        }
+                        calculateForceAndTorque_dipole(r, rNorm, p.orientation, other.orientation, force, torque);
+                        //if (p.type == 0 && other.type == 0) {
+                        //    calculateForce_quadraticAttraction(40.0f, r, rNorm, force);
+                        //}
 
                         p.force += force;
                         p.torque += torque;
@@ -356,8 +386,8 @@ struct Model {
                         //p.angularVelocity += dva;
 
                         //Solid repulsion
-                        if (rNorm < 2.0*DOT_SIZE)
-                            p.force += r * (-300.0f / rNorm);
+                        //if (rNorm < 2.0*DOT_SIZE)
+                        //    p.force += r * (-300.0f / rNorm);
                     }
                 }
                 // Floc behavior
@@ -368,7 +398,7 @@ struct Model {
             }
 
             //Link forces
-            assert(p.linked.size() <= 1);
+            /*assert(p.linked.size() <= 1);
             for (Particle* otherLinked : p.linked) {
                 if (otherLinked != &p) {  // Avoid self-interaction
                     sf::Vector2f r = otherLinked->position - p.position;
@@ -381,7 +411,7 @@ struct Model {
                     p.force += force;
                     p.torque += torque;
                 }
-            }
+            }*/
 
             // Containing forces
             if (p.position.x > WORLD_WIDTH/2) p.force += sf::Vector2f(-0.1,0.0);
@@ -435,16 +465,15 @@ struct Model {
 void drawModel(sf::RenderWindow& ioWindow, const Model& iModel) {
     for (const auto& p : iModel.particles)
     {
-        sf::VertexArray lines(sf::Lines, 2);
-        for (auto& other : p.linked) {
-            lines[0].position = p.position;
-            lines[1].position = other->position;
-            lines[0].color = sf::Color::Green;
-            lines[1].color = sf::Color::Green;
+        //sf::VertexArray lines(sf::Lines, 2);
+        //for (auto& other : p.linked) {
+        //    lines[0].position = p.position;
+        //    lines[1].position = other->position;
+        //    lines[0].color = sf::Color::Green;
+        //    lines[1].color = sf::Color::Green;
             //ioWindow.draw(lines);
-        }
+        //}
 
-        /*
         float tailLength = 10.0;
         sf::Vertex line[] =
         {
@@ -452,7 +481,6 @@ void drawModel(sf::RenderWindow& ioWindow, const Model& iModel) {
             sf::Vertex(p.position + tailLength*unitVectorFromAngle(p.orientation), sf::Color::White)
         };
         ioWindow.draw(line, 2, sf::Lines);
-        */
 
         //Force debug
         //sf::Vertex lineF[] =
@@ -472,7 +500,7 @@ void drawModel(sf::RenderWindow& ioWindow, const Model& iModel) {
         //ioWindow.draw(lineV, 2, sf::Lines);
 
         ioWindow.draw(p.shape);
-        ioWindow.draw(lines);
+        //ioWindow.draw(lines);
 
         //Pole debug
         /*
