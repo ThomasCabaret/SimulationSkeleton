@@ -267,7 +267,40 @@ struct Model {
         {
             oTorque = oTorque/(DL+1.0f);
         }
+    }
 
+    void calculateForceAndTorque_polar1(const sf::Vector2f& pos1,
+                                        const sf::Vector2f& pos2,
+                                        float orientation1,
+                                        float orientation2,
+                                        const sf::Vector2f& r,
+                                        float rNorm,
+                                        sf::Vector2f& oForce,
+                                        float& oTorque)
+    {
+        // The interaction strength
+        float strengthF = 1.0f;
+        float strengthT = 1.0f;
+        float teta = 0.15f;
+
+        oForce = r * (strengthF / rNorm);
+
+        float deltaOrientation = orientation2 - orientation1;
+        // Make sure deltaOrientation is between -pi and pi
+        while (deltaOrientation > M_PI) deltaOrientation -= 2 * M_PI;
+        while (deltaOrientation < -M_PI) deltaOrientation += 2 * M_PI;
+
+        if (deltaOrientation > 0)
+        {
+            oTorque = strengthT;
+        }
+        else
+        {
+            oTorque = -strengthT;
+        }
+
+        //Torque influence as well diminish with distance
+        oTorque = oTorque/(rNorm);
     }
 
     void calculateForce_linearAttraction(float forceMagnitude, const sf::Vector2f& r, float rNorm, sf::Vector2f& force) {
@@ -296,8 +329,8 @@ struct Model {
         //float r5 = rNorm;// * rNorm * rNorm * rNorm * rNorm;
 
         // Compute force
-sf::Vector2f force = (3.0f * cosTheta1 * cosTheta2 - cosTheta12) * r / (rNorm);
-force += (cosTheta1 * u2 + cosTheta2 * u1 - 2 * cosTheta1 * cosTheta2 * r) / (rNorm * rNorm * rNorm);
+        sf::Vector2f force = (3.0f * cosTheta1 * cosTheta2 - cosTheta12) * r / (rNorm);
+        force += (cosTheta1 * u2 + cosTheta2 * u1 - 2 * cosTheta1 * cosTheta2 * r) / (rNorm * rNorm * rNorm);
 
         // Compute torque
         float torque = u1.x * u2.y - u1.y * u2.x - 3 * cosTheta1 * (u1.x * r.y - u1.y * r.x) / rNorm;
@@ -343,7 +376,7 @@ force += (cosTheta1 * u2 + cosTheta2 * u1 - 2 * cosTheta1 * cosTheta2 * r) / (rN
     void step()
     {
         //const float attractionStrength = 0.05f;
-        const float interactionRadius = 10.0f;
+        const float interactionRadius = 50.0f;
         //const float attractionMinThreshold = 5.0f;
         //const float linkingThreshold = 30.0f;
 
@@ -368,7 +401,13 @@ force += (cosTheta1 * u2 + cosTheta2 * u1 - 2 * cosTheta1 * cosTheta2 * r) / (rN
                         //                                   r, rNorm,
                         //                                   force, torque);
 
-                        calculateForceAndTorque_dipole(r, rNorm, p.orientation, other.orientation, force, torque);
+                        calculateForceAndTorque_polar1(p.position, other.position,
+                                                           p.orientation, other.orientation,
+                                                           r, rNorm,
+                                                           force, torque);
+
+
+                        //calculateForceAndTorque_dipole(r, rNorm, p.orientation, other.orientation, force, torque);
                         //if (p.type == 0 && other.type == 0) {
                         //    calculateForce_quadraticAttraction(40.0f, r, rNorm, force);
                         //}
@@ -386,8 +425,11 @@ force += (cosTheta1 * u2 + cosTheta2 * u1 - 2 * cosTheta1 * cosTheta2 * r) / (rN
                         //p.angularVelocity += dva;
 
                         //Solid repulsion
-                        //if (rNorm < 2.0*DOT_SIZE)
-                        //    p.force += r * (-300.0f / rNorm);
+                        if (rNorm < 2.0*2.0*DOT_SIZE) //The first 2 is for progressive smoothing
+                        {
+                            float factor = std::pow(2.0*DOT_SIZE/rNorm, 9);
+                            p.force += -r * factor;
+                        }
                     }
                 }
                 // Floc behavior
