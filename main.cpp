@@ -10,7 +10,7 @@
 #endif
 
 
-static int K_PARTICLES = 64;
+static int K_PARTICLES = 200;
 static int WORLD_WIDTH = 1920;
 static int WORLD_HEIGTH = 1080;
 static int DOT_SIZE = 2;
@@ -281,6 +281,7 @@ struct Model {
         // The interaction strength
         float strengthF = 1.0f;
         float strengthT = 1.0f;
+        float divAngle = 0.5f;
         float teta = orientation2 - orientation1;
         // Make sure it is between -pi and pi
         while (teta > M_PI) teta -= 2 * M_PI;
@@ -297,14 +298,9 @@ struct Model {
         float distanceFactor = 1.0f / std::pow(rNorm, 1);
         oForce = r * strengthF * anisoFactor * distanceFactor;
 
-        if (teta > 0)
-        {
-            oTorque = strengthT;
-        }
-        else
-        {
-            oTorque = -strengthT;
-        }
+        float dirFactor = ((teta>0) && (teta<divAngle) || (teta<0) && (teta<-divAngle)) ? -1.0f : 1.0f;
+        //float dirFactor = (teta<0) ? -1.0f : 1.0f;
+        oTorque = dirFactor*strengthT;
 
         //Torque influence as well diminish with distance
         oTorque = oTorque/(rNorm);
@@ -409,9 +405,9 @@ struct Model {
                         //                                   force, torque);
 
                         calculateForceAndTorque_polar1(p.position, other.position,
-                                                           p.orientation, other.orientation,
-                                                           r, rNorm,
-                                                           force, torque);
+                                                       p.orientation, other.orientation,
+                                                       r, rNorm,
+                                                       force, torque);
 
 
                         //calculateForceAndTorque_dipole(r, rNorm, p.orientation, other.orientation, force, torque);
@@ -484,7 +480,7 @@ struct Model {
                 p.velocity *= maxVelocity;
             }
             //Force attract to center to incentive interactions
-            p.velocity -= multiply(p.position, 0.0001);
+            p.velocity -= multiply(p.position, 0.001);
             //Sticky dissipative space and other limits
             p.velocity = multiply(p.velocity, 0.98);
             p.angularVelocity *= 0.98;
