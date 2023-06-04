@@ -281,16 +281,23 @@ struct Model {
         // The interaction strength
         float strengthF = 1.0f;
         float strengthT = 1.0f;
-        float teta = 0.15f;
+        float teta = orientation2 - orientation1;
+        // Make sure it is between -pi and pi
+        while (teta > M_PI) teta -= 2 * M_PI;
+        while (teta < -M_PI) teta += 2 * M_PI;
+        float phi = angleFromVector(r) - orientation1;
+        // Make sure it is between -pi and pi
+        while (phi > M_PI) phi -= 2 * M_PI;
+        while (phi < -M_PI) phi += 2 * M_PI;
 
-        oForce = r * (strengthF / rNorm);
+        //Here I need a f such that:
+        //f(teta, phi) = f(-teta, phi-teta+pi) //action reaction symmetry)
+        //f(teta, phi) = f(-teta, -phi) //mirror symmetry
+        float anisoFactor = sin(teta)*sin(phi)+sin(teta)*sin(phi-teta) + 0.5f;
+        float distanceFactor = 1.0f / std::pow(rNorm, 1);
+        oForce = r * strengthF * anisoFactor * distanceFactor;
 
-        float deltaOrientation = orientation2 - orientation1;
-        // Make sure deltaOrientation is between -pi and pi
-        while (deltaOrientation > M_PI) deltaOrientation -= 2 * M_PI;
-        while (deltaOrientation < -M_PI) deltaOrientation += 2 * M_PI;
-
-        if (deltaOrientation > 0)
+        if (teta > 0)
         {
             oTorque = strengthT;
         }
