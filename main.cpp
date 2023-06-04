@@ -10,12 +10,14 @@
 #endif
 
 
-static int K_PARTICLES = 200;
+static int K_PARTICLES = 3;
 static int WORLD_WIDTH = 1920;
 static int WORLD_HEIGTH = 1080;
 static int DOT_SIZE = 2;
 static int K_NB_TYPE = 16;
 static sf::Vector2f DOT_OFSET = sf::Vector2f(DOT_SIZE, DOT_SIZE);
+
+static bool g_centerize = true;
 
 // Simple struct to hold particle data
 struct Particle {
@@ -42,6 +44,16 @@ float angleFromVector(sf::Vector2f v) {
 
 sf::Vector2f unitVectorFromAngle(float iAngle) {
     return sf::Vector2f(std::cos(iAngle), std::sin(iAngle));
+}
+
+sf::Vector2f rotateVector(const sf::Vector2f& v, float alpha) {
+    float cs = std::cos(alpha);
+    float sn = std::sin(alpha);
+
+    sf::Vector2f rotatedVector;
+    rotatedVector.x = v.x * cs - v.y * sn;
+    rotatedVector.y = v.x * sn + v.y * cs;
+    return rotatedVector;
 }
 
 float colinearFactor(sf::Vector2f v1, sf::Vector2f v2) {
@@ -281,7 +293,7 @@ struct Model {
         // The interaction strength
         float strengthF = 1.0f;
         float strengthT = 1.0f;
-        float divAngle = 0.5f;
+        float divAngle = 0.0f;//0.5f;
         float teta = orientation2 - orientation1;
         // Make sure it is between -pi and pi
         while (teta > M_PI) teta -= 2 * M_PI;
@@ -291,12 +303,18 @@ struct Model {
         while (phi > M_PI) phi -= 2 * M_PI;
         while (phi < -M_PI) phi += 2 * M_PI;
 
+        float phipi = phi;
+        while (phipi > M_PI/2.0) phipi -= M_PI;
+        while (phipi < -M_PI/2.0) phipi += M_PI;
+
         //Here I need a f such that:
         //f(teta, phi) = f(-teta, phi-teta+pi) //action reaction symmetry)
         //f(teta, phi) = f(-teta, -phi) //mirror symmetry
         float anisoFactor = sin(teta)*sin(phi)+sin(teta)*sin(phi-teta) + 0.5f;
-        float distanceFactor = 1.0f / std::pow(rNorm, 1);
-        oForce = r * strengthF * anisoFactor * distanceFactor;
+        float rotatorFactor = (sin(teta)*sin(phi)+sin(teta)*sin(phi-teta)) * M_PI;
+        float distanceFactor = 1.0f / std::pow(rNorm, 2);
+
+        oForce = rotateVector(r, rotatorFactor) * (10.0f*rotatorFactor*rotatorFactor + 1.0f) * strengthF * anisoFactor * distanceFactor;
 
         float dirFactor = ((teta>0) && (teta<divAngle) || (teta<0) && (teta<-divAngle)) ? -1.0f : 1.0f;
         //float dirFactor = (teta<0) ? -1.0f : 1.0f;
@@ -480,7 +498,9 @@ struct Model {
                 p.velocity *= maxVelocity;
             }
             //Force attract to center to incentive interactions
-            p.velocity -= multiply(p.position, 0.001);
+            if (g_centerize) {
+                p.velocity -= multiply(p.position, 0.001);
+            }
             //Sticky dissipative space and other limits
             p.velocity = multiply(p.velocity, 0.98);
             p.angularVelocity *= 0.98;
@@ -613,6 +633,10 @@ int main()
             case sf::Event::MouseButtonReleased:
                 if (event.mouseButton.button == sf::Mouse::Left)
                     isDragging = false;
+                break;
+            case sf::Event::KeyPressed:
+                if (event.key.code == sf::Keyboard::C)
+                    g_centerize = !g_centerize;
                 break;
             }
         }
