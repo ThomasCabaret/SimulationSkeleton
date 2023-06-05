@@ -10,7 +10,7 @@
 #endif
 
 
-static int K_PARTICLES = 3;
+static int K_PARTICLES = 32;
 static int WORLD_WIDTH = 1920;
 static int WORLD_HEIGTH = 1080;
 static int DOT_SIZE = 2;
@@ -34,18 +34,17 @@ struct Particle {
     sf::CircleShape shape;
 };
 
-sf::Vector2f multiply(const sf::Vector2f& vec, float scalar) {
-    return sf::Vector2f(vec.x * scalar, vec.y * scalar);
-}
-
+//////////////////////////////////////////////////////////////////////////////
 float angleFromVector(sf::Vector2f v) {
     return std::atan2(v.y, v.x);
 }
 
+//////////////////////////////////////////////////////////////////////////////
 sf::Vector2f unitVectorFromAngle(float iAngle) {
     return sf::Vector2f(std::cos(iAngle), std::sin(iAngle));
 }
 
+//////////////////////////////////////////////////////////////////////////////
 sf::Vector2f rotateVector(const sf::Vector2f& v, float alpha) {
     float cs = std::cos(alpha);
     float sn = std::sin(alpha);
@@ -56,6 +55,7 @@ sf::Vector2f rotateVector(const sf::Vector2f& v, float alpha) {
     return rotatedVector;
 }
 
+/*
 float colinearFactor(sf::Vector2f v1, sf::Vector2f v2) {
     float dotProduct = v1.x * v2.x + v1.y * v2.y;
     float lengthsProduct = std::sqrt(v1.x * v1.x + v1.y * v1.y) * std::sqrt(v2.x * v2.x + v2.y * v2.y);
@@ -71,17 +71,21 @@ float colinearFactor(sf::Vector2f v1, sf::Vector2f v2) {
 
     return cosineOfAngle;
 }
+*/
 
+//////////////////////////////////////////////////////////////////////////////
 float norm(const sf::Vector2f& vec) {
     return std::sqrt(vec.x * vec.x + vec.y * vec.y);
 }
 
+//////////////////////////////////////////////////////////////////////////////
 void normalize(sf::Vector2f& vec)
 {
     float normVec = norm(vec);
     if (!normVec == 0) vec /= normVec;
 }
 
+//////////////////////////////////////////////////////////////////////////////
 sf::Color getColor(int type) {
     // Convert the type to a hue value between 0 and 360 degrees
     float hue = (type % K_NB_TYPE) * (360.0f / 16.0f);
@@ -146,141 +150,10 @@ struct Model {
             p.shape.setOrigin(DOT_SIZE, DOT_SIZE);
             p.shape.setPosition(p.position);
             particles.push_back(p);
-
-            //build pairs of particles
-            //if (i % 2 == 1) {
-            //    particles[i].linked.push_back(&particles[i-1]);
-            //    particles[i-1].linked.push_back(&particles[i]);
-            //}
         }
     }
 
-    /*
-    void calculateDV_fattyAcid1(const sf::Vector2f& pos1,
-                                const sf::Vector2f& pos2,
-                                float orientation1,
-                                float orientation2,
-                                const sf::Vector2f& r,
-                                float rNorm,
-                                sf::Vector2f& dv,
-                                float& dva)
-    {
-        // The interaction strength
-        float strengthF = 0.2f;
-        float strengthT = 0.2f;
-        float teta = 0.15f;
-
-        //Compute poles locations of the other particle
-        sf::Vector2f aRVect2 = unitVectorFromAngle(orientation2+teta/2.0+M_PI/2.0);
-        sf::Vector2f aRPole2 = pos2 + 5.0f * aRVect2;
-        sf::Vector2f aLVect2 = unitVectorFromAngle(orientation2-teta/2.0-M_PI/2.0);
-        sf::Vector2f aLPole2 = pos2 + 5.0f * aLVect2;
-        float DR = norm(aRPole2 - pos1);
-        float DL = norm(aLPole2 - pos1);
-        float repFactor = rNorm < 5.0 ? 30.0f : 1.0f;
-        if (DR < DL)
-        {
-            dv = repFactor*strengthF/(DR+1.0f)*(aRPole2 - pos1)/DR;
-        }
-        else
-        {
-            dv = repFactor*strengthF/(DL+1.0f)*(aLPole2 - pos1)/DL;
-        }
-
-        float deltaOrientation = orientation2 - orientation1;
-        if (DR < DL)
-        {
-            deltaOrientation += teta;
-        }
-        else
-        {
-            deltaOrientation -= teta;
-        }
-        // Make sure deltaOrientation is between -pi and pi
-        while (deltaOrientation > M_PI) deltaOrientation -= 2 * M_PI;
-        while (deltaOrientation < -M_PI) deltaOrientation += 2 * M_PI;
-
-        if (deltaOrientation > 0)
-        {
-            dva = strengthT;
-        }
-        else
-        {
-            dva = -strengthT;
-        }
-    }
-    */
-
-    void calculateForceAndTorque_fattyAcid1(const sf::Vector2f& pos1,
-                                            const sf::Vector2f& pos2,
-                                            float orientation1,
-                                            float orientation2,
-                                            const sf::Vector2f& r,
-                                            float rNorm,
-                                            sf::Vector2f& oForce,
-                                            float& oTorque)
-    {
-        // The interaction strength
-        float strengthF = 1.0f;
-        float strengthT = 1.0f;
-        float teta = 0.15f;
-
-        //Compute poles locations of the other particle
-        sf::Vector2f aRVect2 = unitVectorFromAngle(orientation2+teta/2.0+M_PI/2.0);
-        sf::Vector2f aRPole2 = pos2 + 5.0f * aRVect2;
-        sf::Vector2f aLVect2 = unitVectorFromAngle(orientation2-teta/2.0-M_PI/2.0);
-        sf::Vector2f aLPole2 = pos2 + 5.0f * aLVect2;
-        float DR = norm(aRPole2 - pos1);
-        float DL = norm(aLPole2 - pos1);
-        float repFactor = rNorm < 5.0 ? 30.0f : 1.0f;
-        if (DR < DL)
-        {
-            float colFactor = colinearFactor(aRPole2 - pos1, unitVectorFromAngle(orientation2));
-            float anisoFactor = 0.001*colFactor*colFactor*1000.0+1.0; //x times more force when "inserting"
-            float distanceFactor = 1.0/((DR+1.0f)*(DR+1.0f)*(DR+1.0f));
-            oForce = anisoFactor*repFactor*distanceFactor*strengthF*(aRPole2 - pos1);
-        }
-        else
-        {
-            float colFactor = colinearFactor(aLPole2 - pos1, unitVectorFromAngle(orientation2));
-            float anisoFactor = 0.001*colFactor*colFactor*1000.0+1.0; //x times more force when "inserting"
-            float distanceFactor = 1.0/((DL+1.0f)*(DL+1.0f)*(DL+1.0f));
-            oForce = anisoFactor*repFactor*distanceFactor*strengthF*(aLPole2 - pos1);
-        }
-
-        float deltaOrientation = orientation2 - orientation1;
-        if (DR < DL)
-        {
-            deltaOrientation += teta;
-        }
-        else
-        {
-            deltaOrientation -= teta;
-        }
-        // Make sure deltaOrientation is between -pi and pi
-        while (deltaOrientation > M_PI) deltaOrientation -= 2 * M_PI;
-        while (deltaOrientation < -M_PI) deltaOrientation += 2 * M_PI;
-
-        if (deltaOrientation > 0)
-        {
-            oTorque = strengthT;
-        }
-        else
-        {
-            oTorque = -strengthT;
-        }
-
-        //Torque influence as well diminish with distance
-        if (DR < DL)
-        {
-            oTorque = oTorque/(DR+1.0f);
-        }
-        else
-        {
-            oTorque = oTorque/(DL+1.0f);
-        }
-    }
-
+    //////////////////////////////////////////////////////////////////////////////
     void calculateForceAndTorque_polar1(const sf::Vector2f& pos1,
                                         const sf::Vector2f& pos2,
                                         float orientation1,
@@ -293,7 +166,7 @@ struct Model {
         // The interaction strength
         float strengthF = 1.0f;
         float strengthT = 1.0f;
-        float divAngle = 0.0f;//0.5f;
+        float divAngle = 0.0f;
         float teta = orientation2 - orientation1;
         // Make sure it is between -pi and pi
         while (teta > M_PI) teta -= 2 * M_PI;
@@ -310,8 +183,9 @@ struct Model {
         //Here I need a f such that:
         //f(teta, phi) = f(-teta, phi-teta+pi) //action reaction symmetry)
         //f(teta, phi) = f(-teta, -phi) //mirror symmetry
-        float anisoFactor = sin(teta)*sin(phi)+sin(teta)*sin(phi-teta) + 0.5f;
-        float rotatorFactor = (sin(teta)*sin(phi)+sin(teta)*sin(phi-teta)) * M_PI;
+        float anisoFactor = sin(teta)*sin(phi)+sin(teta)*sin(phi-teta) + 1.6f;
+        //Maybe instead of rotating we can add an orthogonal force (maybe not needed)
+        float rotatorFactor = (sin(teta)*sin(phi)+sin(teta)*sin(phi-teta))/2.0f;// * M_PI;
         float distanceFactor = 1.0f / std::pow(rNorm, 2);
 
         oForce = rotateVector(r, rotatorFactor) * (10.0f*rotatorFactor*rotatorFactor + 1.0f) * strengthF * anisoFactor * distanceFactor;
@@ -324,82 +198,20 @@ struct Model {
         oTorque = oTorque/(rNorm);
     }
 
+    //////////////////////////////////////////////////////////////////////////////
     void calculateForce_linearAttraction(float forceMagnitude, const sf::Vector2f& r, float rNorm, sf::Vector2f& force) {
         force = r * (forceMagnitude / rNorm);
     }
 
+    //////////////////////////////////////////////////////////////////////////////
     void calculateForce_quadraticAttraction(float forceMagnitude, const sf::Vector2f& r, float rNorm, sf::Vector2f& force) {
         force = r * (forceMagnitude / (rNorm*rNorm));
     }
 
-    void calculateForceAndTorque_dipole(const sf::Vector2f& r,
-                                        float rNorm,
-                                        float orientation1,
-                                        float orientation2,
-                                        sf::Vector2f& oForce,
-                                        float& oTorque) {
-
-        // Construct orientation vectors
-        sf::Vector2f u1 = unitVectorFromAngle(orientation1);
-        sf::Vector2f u2 = unitVectorFromAngle(orientation2);
-
-        // Compute needed quantities
-        float cosTheta1 = u1.x * r.x + u1.y * r.y / rNorm;
-        float cosTheta2 = u2.x * r.x + u2.y * r.y / rNorm;
-        float cosTheta12 = u1.x * u2.x + u1.y * u2.y;
-        //float r5 = rNorm;// * rNorm * rNorm * rNorm * rNorm;
-
-        // Compute force
-        sf::Vector2f force = (3.0f * cosTheta1 * cosTheta2 - cosTheta12) * r / (rNorm);
-        force += (cosTheta1 * u2 + cosTheta2 * u1 - 2 * cosTheta1 * cosTheta2 * r) / (rNorm * rNorm * rNorm);
-
-        // Compute torque
-        float torque = u1.x * u2.y - u1.y * u2.x - 3 * cosTheta1 * (u1.x * r.y - u1.y * r.x) / rNorm;
-
-        // Assign output
-        oForce = force;
-        oTorque = torque;
-    }
-
-/*
-    void calculateForceAndTorque(const sf::Vector2f& r, float rNorm, float orientation1, float orientation2, sf::Vector2f& force, float& torque)
-    {
-        // The interaction strength
-        float strengthF = 10.0f;
-        float strengthT = 1.0f;
-
-        // Calculate the relative orientation
-        float deltaOrientation = orientation2 - orientation1;
-        float cosOrientation = std::cos(deltaOrientation);
-        float sinOrientation = std::sin(deltaOrientation);
-        float dirAngle = angleFromVector(r);
-        float deltaForceOrientation = orientation1-dirAngle;
-        float sinDeltaForceOrientation = std::sin(deltaForceOrientation);
-        // Make sure deltaOrientation is between -pi and pi
-        //while (deltaOrientation > M_PI) deltaOrientation -= 2 * M_PI;
-        //while (deltaOrientation < -M_PI) deltaOrientation += 2 * M_PI;
-
-        // Calculate the force
-        // The force magnitude depends on the relative orientation
-        float forceMagnitude = strengthF * cosOrientation * (sinDeltaForceOrientation * sinDeltaForceOrientation - 0.2);
-        // Solid repulsion
-        if (rNorm < 2.0*DOT_SIZE)
-            forceMagnitude = -1000.0;
-
-        force = r * (forceMagnitude / rNorm);
-
-        // Calculate the torque
-        // The torque magnitude depends on the relative orientation and the distance
-        torque = strengthT * sinOrientation * rNorm;
-    }
-*/
-
+    //////////////////////////////////////////////////////////////////////////////
     void step()
     {
-        //const float attractionStrength = 0.05f;
         const float interactionRadius = 50.0f;
-        //const float attractionMinThreshold = 5.0f;
-        //const float linkingThreshold = 30.0f;
 
         // Calculate the force and torque on particle p due to all other particles
         for (auto& p : particles) {
@@ -417,33 +229,13 @@ struct Model {
                         sf::Vector2f force(0.0, 0.0);
                         float torque = 0.0;
                         //Force model for vesicle formation
-                        //calculateForceAndTorque_fattyAcid1(p.position, other.position,
-                        //                                   p.orientation, other.orientation,
-                        //                                   r, rNorm,
-                        //                                   force, torque);
-
                         calculateForceAndTorque_polar1(p.position, other.position,
                                                        p.orientation, other.orientation,
                                                        r, rNorm,
                                                        force, torque);
 
-
-                        //calculateForceAndTorque_dipole(r, rNorm, p.orientation, other.orientation, force, torque);
-                        //if (p.type == 0 && other.type == 0) {
-                        //    calculateForce_quadraticAttraction(40.0f, r, rNorm, force);
-                        //}
-
                         p.force += force;
                         p.torque += torque;
-
-                        //sf::Vector2f dv(0.0, 0.0);
-                        //float dva = 0.0;
-                        //calculateDV_fattyAcid1(p.position, other.position,
-                        //                       p.orientation, other.orientation,
-                        //                       r, rNorm,
-                        //                       dv, dva);
-                        //p.velocity += dv;
-                        //p.angularVelocity += dva;
 
                         //Solid repulsion
                         if (rNorm < 2.0*2.0*DOT_SIZE) //The first 2 is for progressive smoothing
@@ -499,26 +291,16 @@ struct Model {
             }
             //Force attract to center to incentive interactions
             if (g_centerize) {
-                p.velocity -= multiply(p.position, 0.001);
+                p.velocity -= 0.001f * p.position;
             }
             //Sticky dissipative space and other limits
-            p.velocity = multiply(p.velocity, 0.98);
-            p.angularVelocity *= 0.98;
+            p.velocity = 0.999f * p.velocity;
+            p.angularVelocity *= 0.999f;
             float maxAngularVelocity = 10.0;
             if (p.angularVelocity > maxAngularVelocity) p.angularVelocity = maxAngularVelocity;
             if (p.angularVelocity < -maxAngularVelocity) p.angularVelocity = -maxAngularVelocity;
             p.position = p.position + p.velocity * dt;
             p.orientation = p.orientation + p.angularVelocity * dt;
-
-            // Update position and velocity using Velocity Verlet algorithm
-            //p.position = p.position + p.velocity * dt + 0.5f * acceleration * dt * dt;
-            //sf::Vector2f newAcceleration = p.force;  // Recalculate force here if necessary
-            //p.velocity = p.velocity + 0.5f * (acceleration + newAcceleration) * dt;
-
-            // Update orientation and angular velocity
-            //p.orientation = p.orientation + p.angularVelocity * dt + 0.5f * angularAcceleration * dt * dt;
-            //float newAngularAcceleration = p.torque;  // Recalculate torque here if necessary
-            //p.angularVelocity = p.angularVelocity + 0.5f * (angularAcceleration + newAngularAcceleration) * dt;
 
             // Update the particle's shape position
             p.shape.setPosition(p.position);
@@ -548,11 +330,11 @@ void drawModel(sf::RenderWindow& ioWindow, const Model& iModel) {
         ioWindow.draw(line, 2, sf::Lines);
 
         //Force debug
-        //sf::Vertex lineF[] =
-        //{
-        //    sf::Vertex(p.position, sf::Color::Red),
-        //    sf::Vertex(p.position + p.force, sf::Color::Red)
-        //};
+        sf::Vertex lineF[] =
+        {
+            sf::Vertex(p.position, sf::Color::Red),
+            sf::Vertex(p.position + 10.0f*p.force, sf::Color::Red)
+        };
         //ioWindow.draw(lineF, 2, sf::Lines);
 
 
@@ -565,6 +347,7 @@ void drawModel(sf::RenderWindow& ioWindow, const Model& iModel) {
         //ioWindow.draw(lineV, 2, sf::Lines);
 
         ioWindow.draw(p.shape);
+        ioWindow.draw(lineF, 2, sf::Lines);
         //ioWindow.draw(lines);
 
         //Pole debug
