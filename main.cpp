@@ -10,7 +10,7 @@
 #endif
 
 
-static int K_PARTICLES = 32;
+static int K_PARTICLES = 8;
 static int WORLD_WIDTH = 1920;
 static int WORLD_HEIGTH = 1080;
 static int DOT_SIZE = 2;
@@ -183,9 +183,10 @@ struct Model {
         //Here I need a f such that:
         //f(teta, phi) = f(-teta, phi-teta+pi) //action reaction symmetry)
         //f(teta, phi) = f(-teta, -phi) //mirror symmetry
-        float anisoFactor = sin(teta)*sin(phi)+sin(teta)*sin(phi-teta) + 1.6f;
+        float anisoFactor = 1.0f;//sin(teta)*sin(phi)+sin(teta)*sin(phi-teta) + 1.6f;
         //Maybe instead of rotating we can add an orthogonal force (maybe not needed)
-        float rotatorFactor = (sin(teta)*sin(phi)+sin(teta)*sin(phi-teta))/2.0f;// * M_PI;
+        //2*phi-teta is an invariant angle in an interacting pair
+        float rotatorFactor = sin(2*phi-teta+M_PI);//(sin(teta)*sin(phi)+sin(teta)*sin(phi-teta))/2.0f;// * M_PI;
         float distanceFactor = 1.0f / std::pow(rNorm, 2);
 
         oForce = rotateVector(r, rotatorFactor) * (10.0f*rotatorFactor*rotatorFactor + 1.0f) * strengthF * anisoFactor * distanceFactor;
@@ -211,7 +212,7 @@ struct Model {
     //////////////////////////////////////////////////////////////////////////////
     void step()
     {
-        const float interactionRadius = 50.0f;
+        const float interactionRadius = 20.0f;
 
         // Calculate the force and torque on particle p due to all other particles
         for (auto& p : particles) {
