@@ -5,12 +5,13 @@
 #include <cmath>
 #include <iostream>
 #include <cassert>
+#include <algorithm>
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
 
 
-static int K_PARTICLES = 8;
+static int K_PARTICLES = 40;
 static int WORLD_WIDTH = 1920;
 static int WORLD_HEIGTH = 1080;
 static int DOT_SIZE = 2;
@@ -18,16 +19,19 @@ static int K_NB_TYPE = 16;
 static sf::Vector2f DOT_OFSET = sf::Vector2f(DOT_SIZE, DOT_SIZE);
 
 static bool g_centerize = true;
+static float g_interaction_radius = 8.0f;//10.0f;
 
 // Simple struct to hold particle data
 struct Particle {
     sf::Vector2f position;
     sf::Vector2f velocity;
     float orientation;
+    float midAngle; //debug
     float angularVelocity;
     sf::Vector2f force;
     float torque;
     int type;
+    bool isLeft;
     //std::vector<Particle*> linked;
     //Having view relating object in the model object is not ideal
     //but in SFML not rebuilding the graphical object is significantly faster
@@ -53,6 +57,10 @@ sf::Vector2f rotateVector(const sf::Vector2f& v, float alpha) {
     rotatedVector.x = v.x * cs - v.y * sn;
     rotatedVector.y = v.x * sn + v.y * cs;
     return rotatedVector;
+}
+
+float dot(const sf::Vector2f& v1, const sf::Vector2f& v2) {
+    return v1.x * v2.x + v1.y * v2.y;
 }
 
 /*
@@ -83,6 +91,35 @@ void normalize(sf::Vector2f& vec)
 {
     float normVec = norm(vec);
     if (!normVec == 0) vec /= normVec;
+}
+
+//////////////////////////////////////////////////////////////////////////////
+double middleAngle(double theta1, double theta2) {
+    // Make sure theta1 and theta2 are in the range of [0, 2*PI]
+    theta1 = fmod(theta1, 2*M_PI);
+    if (theta1 < 0)
+        theta1 += 2*M_PI;
+
+    theta2 = fmod(theta2, 2*M_PI);
+    if (theta2 < 0)
+        theta2 += 2*M_PI;
+
+    // Compute difference
+    double diff = theta2 - theta1;
+    if (diff < -M_PI)
+        diff += 2*M_PI;
+    else if (diff > M_PI)
+        diff -= 2*M_PI;
+
+    // Compute middle angle
+    double middle = theta1 + diff / 2.0;
+
+    // Make sure the middle angle is in the range of [0, 2*PI]
+    middle = fmod(middle, 2*M_PI);
+    if (middle < 0)
+        middle += 2*M_PI;
+
+    return middle;
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -154,19 +191,22 @@ struct Model {
     }
 
     //////////////////////////////////////////////////////////////////////////////
-    void calculateForceAndTorque_polar1(const sf::Vector2f& pos1,
-                                        const sf::Vector2f& pos2,
-                                        float orientation1,
-                                        float orientation2,
+    void calculateForceAndTorque_polar1(Particle& p,
+                                        Particle& other,
                                         const sf::Vector2f& r,
                                         float rNorm,
                                         sf::Vector2f& oForce,
                                         float& oTorque)
     {
+        const sf::Vector2f& pos1 = p.position;
+        const sf::Vector2f& pos2 = other.position;
+        float orientation1 = p.orientation;
+        float orientation2 = other.orientation;
+
         // The interaction strength
         float strengthF = 1.0f;
         float strengthT = 1.0f;
-        float divAngle = 0.0f;
+        float divAngle = 0.2;//0.0;//1.5f;
         float teta = orientation2 - orientation1;
         // Make sure it is between -pi and pi
         while (teta > M_PI) teta -= 2 * M_PI;
@@ -175,10 +215,6 @@ struct Model {
         // Make sure it is between -pi and pi
         while (phi > M_PI) phi -= 2 * M_PI;
         while (phi < -M_PI) phi += 2 * M_PI;
-
-        float phipi = phi;
-        while (phipi > M_PI/2.0) phipi -= M_PI;
-        while (phipi < -M_PI/2.0) phipi += M_PI;
 
         //Here I need a f such that:
         //f(teta, phi) = f(-teta, phi-teta+pi) //action reaction symmetry)
@@ -191,7 +227,22 @@ struct Model {
 
         oForce = rotateVector(r, rotatorFactor) * (10.0f*rotatorFactor*rotatorFactor + 1.0f) * strengthF * anisoFactor * distanceFactor;
 
-        float dirFactor = ((teta>0) && (teta<divAngle) || (teta<0) && (teta<-divAngle)) ? -1.0f : 1.0f;
+        //Something like (phi>0)
+        float midAngle = middleAngle(orientation1, orientation2);
+        p.midAngle = midAngle;
+        bool isLeft = dot(r, rotateVector(unitVectorFromAngle(midAngle), -M_PI/2.0)) > 0;
+        //p.isLeft = isLeft;
+        //Debug left right
+        if(isLeft) {p.shape.setFillColor(sf::Color::Red);} else {p.shape.setFillColor(sf::Color::Blue);}
+
+        float leftTargetOffset = (-teta-divAngle)/2.0;
+        float righTargetOffset = (-teta+divAngle)/2.0;
+        while (leftTargetOffset > M_PI) leftTargetOffset -= 2 * M_PI;
+        while (leftTargetOffset < -M_PI) leftTargetOffset += 2 * M_PI;
+        while (righTargetOffset > M_PI) righTargetOffset -= 2 * M_PI;
+        while (righTargetOffset < -M_PI) righTargetOffset += 2 * M_PI;
+        float dirFactor = ((isLeft && (leftTargetOffset<0)) || (!isLeft && (righTargetOffset<0))) ? 1.0f : -1.0f;
+        //float dirFactor = ((isLeft && (teta>0) && (teta<divAngle)) || (isLeft && (teta<0) && (teta<-divAngle))) ? -1.0f : 1.0f;
         //float dirFactor = (teta<0) ? -1.0f : 1.0f;
         oTorque = dirFactor*strengthT;
 
@@ -212,7 +263,7 @@ struct Model {
     //////////////////////////////////////////////////////////////////////////////
     void step()
     {
-        const float interactionRadius = 20.0f;
+        //const float interactionRadius = 20.0f;
 
         // Calculate the force and torque on particle p due to all other particles
         for (auto& p : particles) {
@@ -225,13 +276,12 @@ struct Model {
                 if (&other != &p) {  // Avoid self-interaction
                     sf::Vector2f r = other.position - p.position;
                     float rNorm = norm(r);
-                    if (rNorm < interactionRadius) {  // Consider only particles within the interaction radius
+                    if (rNorm < g_interaction_radius) {  // Consider only particles within the interaction radius
                         // Calculate force and torque using appropriate model
                         sf::Vector2f force(0.0, 0.0);
                         float torque = 0.0;
                         //Force model for vesicle formation
-                        calculateForceAndTorque_polar1(p.position, other.position,
-                                                       p.orientation, other.orientation,
+                        calculateForceAndTorque_polar1(p, other,
                                                        r, rNorm,
                                                        force, torque);
 
@@ -295,8 +345,8 @@ struct Model {
                 p.velocity -= 0.001f * p.position;
             }
             //Sticky dissipative space and other limits
-            p.velocity = 0.999f * p.velocity;
-            p.angularVelocity *= 0.999f;
+            p.velocity = 0.99f * p.velocity;
+            p.angularVelocity *= 0.995f;
             float maxAngularVelocity = 10.0;
             if (p.angularVelocity > maxAngularVelocity) p.angularVelocity = maxAngularVelocity;
             if (p.angularVelocity < -maxAngularVelocity) p.angularVelocity = -maxAngularVelocity;
@@ -305,7 +355,7 @@ struct Model {
 
             // Update the particle's shape position
             p.shape.setPosition(p.position);
-            p.shape.setFillColor(getColor(p.type));
+            //p.shape.setFillColor(getColor(p.type));
         }
     }
 };
@@ -330,6 +380,14 @@ void drawModel(sf::RenderWindow& ioWindow, const Model& iModel) {
         };
         ioWindow.draw(line, 2, sf::Lines);
 
+        float mdLength = 30.0;
+        sf::Vertex linemd[] =
+        {
+            sf::Vertex(p.position, sf::Color::Yellow),
+            sf::Vertex(p.position + mdLength*unitVectorFromAngle(p.midAngle), sf::Color::Yellow)
+        };
+        ioWindow.draw(linemd, 2, sf::Lines);
+
         //Force debug
         sf::Vertex lineF[] =
         {
@@ -350,6 +408,15 @@ void drawModel(sf::RenderWindow& ioWindow, const Model& iModel) {
         ioWindow.draw(p.shape);
         ioWindow.draw(lineF, 2, sf::Lines);
         //ioWindow.draw(lines);
+
+        //Draw interaction radius
+        sf::CircleShape circle(g_interaction_radius);  // Radius of the circle
+        circle.setFillColor(sf::Color::Transparent);  // Set the fill color to transparent
+        circle.setOutlineThickness(0.1f);  // Set the outline thickness
+        circle.setOutlineColor(sf::Color::Green);  // Set the outline color to green
+        circle.setOrigin(g_interaction_radius, g_interaction_radius);
+        circle.setPosition(p.position);
+        ioWindow.draw(circle);
 
         //Pole debug
         /*
