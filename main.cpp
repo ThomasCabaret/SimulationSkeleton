@@ -12,14 +12,15 @@
 
 
 static int K_PARTICLES = 100;
-static int WORLD_WIDTH = 1920;
-static int WORLD_HEIGTH = 1080;
+static int WORLD_WIDTH = 480;//960;//1920;
+static int WORLD_HEIGTH = 270;//540;//1080;
 static int DOT_SIZE = 2;
 static int K_NB_TYPE = 16;
 static sf::Vector2f DOT_OFSET = sf::Vector2f(DOT_SIZE, DOT_SIZE);
 
-static bool g_centerize = true;
+static bool g_centerize = false;
 static float g_interaction_radius = 8.0f;//10.0f;
+static float g_temp_speed = 1.0f;
 
 // Simple struct to hold particle data
 struct Particle {
@@ -168,8 +169,8 @@ struct Model {
     {
         // Initialize random number generator
         std::uniform_int_distribution<> disType(0, K_NB_TYPE-1);
-        std::uniform_real_distribution<> disX(-WORLD_WIDTH/16, WORLD_WIDTH/16);
-        std::uniform_real_distribution<> disY(-WORLD_HEIGTH/16, WORLD_HEIGTH/16);
+        std::uniform_real_distribution<> disX(-WORLD_WIDTH/4, WORLD_WIDTH/4);
+        std::uniform_real_distribution<> disY(-WORLD_HEIGTH/4, WORLD_HEIGTH/4);
         std::uniform_real_distribution<> disV(-2, 2);
         std::uniform_real_distribution<> disA(0, 2.0*M_PI);
 
@@ -245,6 +246,10 @@ struct Model {
 
         //Torque influence as well diminish with distance
         oTorque = oTorque/(rNorm);
+
+        //Mutual viscosity system (particles try to slow to the center of mass of the system)
+        //TODO repulsion should be an exception!
+        oForce += ((p.velocity+other.velocity)/2.0f-p.velocity)*0.8f;
     }
 
     //////////////////////////////////////////////////////////////////////////////
@@ -260,7 +265,7 @@ struct Model {
     //////////////////////////////////////////////////////////////////////////////
     void step()
     {
-        //const float interactionRadius = 20.0f;
+        float dt = 0.01;
 
         // Calculate the force and torque on particle p due to all other particles
         for (auto& p : particles) {
@@ -312,10 +317,21 @@ struct Model {
             }*/
 
             // Containing forces
-            if (p.position.x > WORLD_WIDTH/2) p.force += sf::Vector2f(-0.1,0.0);
-            if (p.position.x < -WORLD_WIDTH/2) p.force += sf::Vector2f(0.1,0.0);
-            if (p.position.y > WORLD_HEIGTH/2) p.force += sf::Vector2f(0.0,-0.1);
-            if (p.position.y < -WORLD_HEIGTH/2) p.force += sf::Vector2f(0.0,0.1);
+            float amp = 2.0;
+            if (p.position.x > WORLD_WIDTH/2) p.force += sf::Vector2f(-amp,0.0);
+            if (p.position.x < -WORLD_WIDTH/2) p.force += sf::Vector2f(amp,0.0);
+            if (p.position.y > WORLD_HEIGTH/2) p.force += sf::Vector2f(0.0,-amp);
+            if (p.position.y < -WORLD_HEIGTH/2) p.force += sf::Vector2f(0.0,amp);
+
+            // Brownian motion model
+            // Particle are boosted in the direction of their velocity below a given value.
+            // + a rotation perturbation
+            if (norm(p.velocity) <= g_temp_speed)
+            {
+                p.force += 0.1f*p.velocity / dt;
+            }
+            std::uniform_real_distribution<> disBrownian(-1.0, 1.0);
+            p.force += sf::Vector2f(disBrownian(gen), disBrownian(gen));
         }
 
         // Update particles from forces
@@ -323,7 +339,6 @@ struct Model {
             // Calculate the acceleration and angular acceleration (assuming mass and moment of inertia = 1)
             sf::Vector2f acceleration = p.force;
             float angularAcceleration = p.torque;
-            float dt = 0.01;
 
             // Using naive algo
             p.velocity = p.velocity + acceleration * dt;
@@ -336,20 +351,21 @@ struct Model {
                 p.velocity *= maxVelocity;
             }
 
+            // Cap angular velocity
+            float maxAngularVelocity = 10.0;
+            if (p.angularVelocity > maxAngularVelocity) p.angularVelocity = maxAngularVelocity;
+            if (p.angularVelocity < -maxAngularVelocity) p.angularVelocity = -maxAngularVelocity;
+
             //Force attract to center to incentive interactions
             if (g_centerize) {
                 p.velocity -= 0.001f * p.position;
             }
 
             //Sticky dissipative space and other limits
-            p.velocity = 0.995f * p.velocity;
+            p.velocity = 0.99995f * p.velocity;
             p.angularVelocity *= 0.995f;
 
-            // Cap angular velocity
-            float maxAngularVelocity = 10.0;
-            if (p.angularVelocity > maxAngularVelocity) p.angularVelocity = maxAngularVelocity;
-            if (p.angularVelocity < -maxAngularVelocity) p.angularVelocity = -maxAngularVelocity;
-
+            // Update
             p.position = p.position + p.velocity * dt;
             p.orientation = p.orientation + p.angularVelocity * dt;
 
@@ -360,7 +376,7 @@ struct Model {
     }
 };
 
-void drawModel(sf::RenderWindow& ioWindow, const Model& iModel) {
+void drawModel(sf::RenderWindow& ioWindow, const sf::RectangleShape& iWorldRect, const Model& iModel) {
     for (const auto& p : iModel.particles)
     {
         // Links
@@ -419,6 +435,7 @@ void drawModel(sf::RenderWindow& ioWindow, const Model& iModel) {
         circle.setOrigin(g_interaction_radius, g_interaction_radius);
         circle.setPosition(p.position);
         ioWindow.draw(circle);
+        ioWindow.draw(iWorldRect);
     }
 }
 
@@ -426,7 +443,7 @@ void drawModel(sf::RenderWindow& ioWindow, const Model& iModel) {
 int main()
 {
     // Create the main window
-    sf::RenderWindow window(sf::VideoMode(WORLD_WIDTH, WORLD_HEIGTH), "Particle system");
+    sf::RenderWindow window(sf::VideoMode(1920, 1080), "Particle system");
 
     // Model
     Model myModel;
@@ -437,6 +454,15 @@ int main()
     // Variables to store the state of mouse dragging
     bool isDragging = false;
     sf::Vector2f lastMousePos;
+
+    // Create a sf::RectangleShape with the given world size
+    sf::RectangleShape worldRect(sf::Vector2f(WORLD_WIDTH, WORLD_HEIGTH));
+    worldRect.setOutlineThickness(4.0f); // Adjust as needed
+    worldRect.setOutlineColor(sf::Color::Red);
+    worldRect.setFillColor(sf::Color::Transparent);
+    worldRect.setOrigin(WORLD_WIDTH / 2.0f, WORLD_HEIGTH / 2.0f);
+    worldRect.setPosition(0.0f, 0.0f);
+
 
     // main loop
     while (window.isOpen()) {
@@ -494,7 +520,7 @@ int main()
         window.clear();
 
         // Draw particles
-        drawModel(window, myModel);
+        drawModel(window, worldRect, myModel);
 
         // Update the window
         window.display();
