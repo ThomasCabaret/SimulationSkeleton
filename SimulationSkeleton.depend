@@ -488,7 +488,9 @@
 	<cmath>
 	<assert.h>
 
-1685639943 source:d:\codeprojects\simulationskeleton\main.cpp
+1686250711 source:d:\codeprojects\simulationskeleton\main.cpp
+	"imgui.h"
+	"imgui-SFML.h"
 	<SFML/Graphics.hpp>
 	<vector>
 	<thread>
@@ -496,4 +498,145 @@
 	<cmath>
 	<iostream>
 	<cassert>
+	<algorithm>
+
+1686248869 source:d:\codeprojects\simulationskeleton\imgui\imgui.cpp
+	"imgui.h"
+	"imgui_internal.h"
+	<stdio.h>
+	<stddef.h>
+	<stdint.h>
+	<Windows.h>
+	<windows.h>
+	<TargetConditionals.h>
+	"stb_sprintf.h"
+	<Carbon/Carbon.h>
+	<imm.h>
+	"imgui_user.inl"
+
+1686248869 d:\codeprojects\simulationskeleton\imgui\imgui.h
+	"imconfig.h"
+	<float.h>
+	<stdarg.h>
+	<stddef.h>
+	<string.h>
+	<assert.h>
+	"imgui_user.h"
+
+1686249098 d:\codeprojects\simulationskeleton\imgui\imconfig.h
+	"imconfig-SFML.h"
+
+1686248891 d:\codeprojects\simulationskeleton\imgui\imconfig-sfml.h
+	<SFML/Graphics/Color.hpp>
+	<SFML/System/Vector2.hpp>
+	<cstdint>
+	"imgui-SFML_export.h"
+
+1686248891 d:\codeprojects\simulationskeleton\imgui\imgui-sfml_export.h
+
+1686248869 d:\codeprojects\simulationskeleton\imgui\imgui_internal.h
+	"imgui_internal.h"
+	"imgui.h"
+	<stdio.h>
+	<stdlib.h>
+	<math.h>
+	<limits.h>
+	<immintrin.h>
+	"imstb_textedit.h"
+
+1686248869 d:\codeprojects\simulationskeleton\imgui\imstb_textedit.h
+	<string.h>
+
+1686248869 source:d:\codeprojects\simulationskeleton\imgui\imgui_draw.cpp
+	"imgui.h"
+	"imgui_internal.h"
+	"misc/freetype/imgui_freetype.h"
+	<stdio.h>
+	"imstb_rectpack.h"
+	"imstb_truetype.h"
+
+1686248869 d:\codeprojects\simulationskeleton\imgui\imstb_rectpack.h
+	<stdlib.h>
+	<assert.h>
+
+1686248869 d:\codeprojects\simulationskeleton\imgui\imstb_truetype.h
+	"stb_truetype.h"
+	<stdio.h>
+	"stb_truetype.h"
+	<math.h>
+	<math.h>
+	<math.h>
+	<math.h>
+	<math.h>
+	<stdlib.h>
+	<assert.h>
+	<string.h>
+	<string.h>
+
+1686248869 source:d:\codeprojects\simulationskeleton\imgui\imgui_tables.cpp
+	"imgui.h"
+	"imgui_internal.h"
+	<stddef.h>
+	<stdint.h>
+
+1686248869 source:d:\codeprojects\simulationskeleton\imgui\imgui_widgets.cpp
+	"imgui.h"
+	"imgui_internal.h"
+	<stddef.h>
+	<stdint.h>
+	"imstb_textedit.h"
+
+1686248891 source:d:\codeprojects\simulationskeleton\imgui\imgui-sfml.cpp
+	"imgui-SFML.h"
+	<imgui.h>
+	<SFML/Config.hpp>
+	<SFML/Graphics/Color.hpp>
+	<SFML/Graphics/RenderTarget.hpp>
+	<SFML/Graphics/RenderTexture.hpp>
+	<SFML/Graphics/RenderWindow.hpp>
+	<SFML/Graphics/Sprite.hpp>
+	<SFML/Graphics/Texture.hpp>
+	<SFML/OpenGL.hpp>
+	<SFML/Window/Clipboard.hpp>
+	<SFML/Window/Cursor.hpp>
+	<SFML/Window/Event.hpp>
+	<SFML/Window/Touch.hpp>
+	<SFML/Window/Window.hpp>
+	<cassert>
+	<cmath>
+	<cstddef>
+	<cstdint>
+	<cstring>
+	<algorithm>
+	<memory>
+	<vector>
+	<SFML/System/NativeActivity.hpp>
+	<android/native_activity.h>
+	<jni.h>
+
+1686248891 d:\codeprojects\simulationskeleton\imgui\imgui-sfml.h
+	<SFML/Graphics/Color.hpp>
+	<SFML/Graphics/Rect.hpp>
+	<SFML/System/Time.hpp>
+	<SFML/System/Vector2.hpp>
+	<SFML/Window/Joystick.hpp>
+	"imgui-SFML_export.h"
+
+1606603966 d:\codeprojects\libs\sfml-2.5.1-windows-gcc-7.3.0-mingw-64-bit\sfml-2.5.1\include\sfml\opengl.hpp
+	<SFML/Config.hpp>
+	<windows.h>
+	<GL/gl.h>
+	<GLES/gl.h>
+	<GLES/glext.h>
+	<GL/gl.h>
+	<OpenGL/gl.h>
+	<OpenGLES/ES1/gl.h>
+	<OpenGLES/ES1/glext.h>
+	<GLES/gl.h>
+	<GLES/glext.h>
+	<GLES2/gl2platform.h>
+	<GLES2/gl2ext.h>
+
+1606603967 d:\codeprojects\libs\sfml-2.5.1-windows-gcc-7.3.0-mingw-64-bit\sfml-2.5.1\include\sfml\system\nativeactivity.hpp
+	<SFML/System/Export.hpp>
 

@@ -1,3 +1,5 @@
+#include "imgui.h"
+#include "imgui-SFML.h"
 #include <SFML/Graphics.hpp>
 #include <vector>
 #include <thread>
@@ -444,6 +446,9 @@ int main()
 {
     // Create the main window
     sf::RenderWindow window(sf::VideoMode(1920, 1080), "Particle system");
+    ImGui::SFML::Init(window);
+    ImGui::GetStyle().ScaleAllSizes(3.0f);
+    ImGui::GetIO().FontGlobalScale = 3.0f;
 
     // Model
     Model myModel;
@@ -465,10 +470,12 @@ int main()
 
 
     // main loop
+    sf::Clock deltaClock;
     while (window.isOpen()) {
         // Handle events
         sf::Event event;
         while (window.pollEvent(event)) {
+            ImGui::SFML::ProcessEvent(event);
             switch (event.type)
             {
             case sf::Event::Closed:
@@ -482,11 +489,13 @@ int main()
                     view.zoom(1.1f);
                 break;
             case sf::Event::MouseButtonPressed:
-                if (event.mouseButton.button == sf::Mouse::Left) {
-                    isDragging = true;
-                    lastMousePos = window.mapPixelToCoords(sf::Mouse::getPosition(window));
+                if (!ImGui::GetIO().WantCaptureMouse) {
+                    if (event.mouseButton.button == sf::Mouse::Left) {
+                        isDragging = true;
+                        lastMousePos = window.mapPixelToCoords(sf::Mouse::getPosition(window));
+                    }
+                    break;
                 }
-                break;
             case sf::Event::MouseButtonReleased:
                 if (event.mouseButton.button == sf::Mouse::Left)
                     isDragging = false;
@@ -497,6 +506,12 @@ int main()
                 break;
             }
         }
+        ImGui::SFML::Update(window, deltaClock.restart());
+
+        //GUI
+        ImGui::Begin("Demo window");
+        ImGui::SliderFloat("Speed", &g_temp_speed, 0.0f, 10.0f);
+        ImGui::End();
 
         // Check for mouse dragging
         if (isDragging && sf::Mouse::isButtonPressed(sf::Mouse::Left)) {
@@ -521,10 +536,13 @@ int main()
 
         // Draw particles
         drawModel(window, worldRect, myModel);
+        ImGui::SFML::Render(window);
 
         // Update the window
         window.display();
     }
+
+    ImGui::SFML::Shutdown();
 
     return 0;
 }

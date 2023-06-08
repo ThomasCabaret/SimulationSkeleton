@@ -13,6 +13,7 @@
 				<Option compiler="gcc" />
 				<Compiler>
 					<Add option="-g" />
+					<Add directory="ImGui" />
 				</Compiler>
 				<Linker>
 					<Add library="sfml-graphics-d" />
@@ -20,6 +21,7 @@
 					<Add library="sfml-network-d" />
 					<Add library="sfml-window-d" />
 					<Add library="sfml-system-d" />
+					<Add library="opengl32" />
 				</Linker>
 			</Target>
 			<Target title="Release">
@@ -29,6 +31,7 @@
 				<Option compiler="gcc" />
 				<Compiler>
 					<Add option="-O2" />
+					<Add directory="ImGui" />
 				</Compiler>
 				<Linker>
 					<Add option="-s" />
@@ -37,6 +40,7 @@
 					<Add library="sfml-network" />
 					<Add library="sfml-window" />
 					<Add library="sfml-system" />
+					<Add library="opengl32" />
 				</Linker>
 			</Target>
 		</Build>
@@ -49,6 +53,20 @@
 		<Linker>
 			<Add directory="D:/CodeProjects/Libs/SFML-2.5.1-windows-gcc-7.3.0-mingw-64-bit/SFML-2.5.1/lib" />
 		</Linker>
+		<Unit filename="ImGui/imconfig-SFML.h" />
+		<Unit filename="ImGui/imconfig.h" />
+		<Unit filename="ImGui/imgui-SFML.cpp" />
+		<Unit filename="ImGui/imgui-SFML.h" />
+		<Unit filename="ImGui/imgui-SFML_export.h" />
+		<Unit filename="ImGui/imgui.cpp" />
+		<Unit filename="ImGui/imgui.h" />
+		<Unit filename="ImGui/imgui_draw.cpp" />
+		<Unit filename="ImGui/imgui_internal.h" />
+		<Unit filename="ImGui/imgui_tables.cpp" />
+		<Unit filename="ImGui/imgui_widgets.cpp" />
+		<Unit filename="ImGui/imstb_rectpack.h" />
+		<Unit filename="ImGui/imstb_textedit.h" />
+		<Unit filename="ImGui/imstb_truetype.h" />
 		<Unit filename="main.cpp" />
 		<Extensions>
 			<lib_finder disable_auto="1" />
