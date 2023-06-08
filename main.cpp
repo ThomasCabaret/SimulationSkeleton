@@ -11,7 +11,7 @@
 #endif
 
 
-static int K_PARTICLES = 40;
+static int K_PARTICLES = 100;
 static int WORLD_WIDTH = 1920;
 static int WORLD_HEIGTH = 1080;
 static int DOT_SIZE = 2;
@@ -26,12 +26,12 @@ struct Particle {
     sf::Vector2f position;
     sf::Vector2f velocity;
     float orientation;
-    float midAngle; //debug
+    //float midAngle; //debug
     float angularVelocity;
     sf::Vector2f force;
     float torque;
     int type;
-    bool isLeft;
+    //bool isLeft;
     //std::vector<Particle*> linked;
     //Having view relating object in the model object is not ideal
     //but in SFML not rebuilding the graphical object is significantly faster
@@ -206,7 +206,7 @@ struct Model {
         // The interaction strength
         float strengthF = 1.0f;
         float strengthT = 1.0f;
-        float divAngle = 0.2;//0.0;//1.5f;
+        float divAngle = 0.3;
         float teta = orientation2 - orientation1;
         // Make sure it is between -pi and pi
         while (teta > M_PI) teta -= 2 * M_PI;
@@ -220,7 +220,7 @@ struct Model {
         //f(teta, phi) = f(-teta, phi-teta+pi) //action reaction symmetry)
         //f(teta, phi) = f(-teta, -phi) //mirror symmetry
         float anisoFactor = 1.0f;//sin(teta)*sin(phi)+sin(teta)*sin(phi-teta) + 1.6f;
-        //Maybe instead of rotating we can add an orthogonal force (maybe not needed)
+        if (((2*phi-teta+M_PI)*(2*phi-teta+M_PI)+teta*teta) < 2.0*divAngle*divAngle) anisoFactor = -1.0f;
         //2*phi-teta is an invariant angle in an interacting pair
         float rotatorFactor = sin(2*phi-teta+M_PI);//(sin(teta)*sin(phi)+sin(teta)*sin(phi-teta))/2.0f;// * M_PI;
         float distanceFactor = 1.0f / std::pow(rNorm, 2);
@@ -229,11 +229,10 @@ struct Model {
 
         //Something like (phi>0)
         float midAngle = middleAngle(orientation1, orientation2);
-        p.midAngle = midAngle;
         bool isLeft = dot(r, rotateVector(unitVectorFromAngle(midAngle), -M_PI/2.0)) > 0;
-        //p.isLeft = isLeft;
+
         //Debug left right
-        if(isLeft) {p.shape.setFillColor(sf::Color::Red);} else {p.shape.setFillColor(sf::Color::Blue);}
+        //if(isLeft) {p.shape.setFillColor(sf::Color::Red);} else {p.shape.setFillColor(sf::Color::Blue);}
 
         float leftTargetOffset = (-teta-divAngle)/2.0;
         float righTargetOffset = (-teta+divAngle)/2.0;
@@ -242,8 +241,6 @@ struct Model {
         while (righTargetOffset > M_PI) righTargetOffset -= 2 * M_PI;
         while (righTargetOffset < -M_PI) righTargetOffset += 2 * M_PI;
         float dirFactor = ((isLeft && (leftTargetOffset<0)) || (!isLeft && (righTargetOffset<0))) ? 1.0f : -1.0f;
-        //float dirFactor = ((isLeft && (teta>0) && (teta<divAngle)) || (isLeft && (teta<0) && (teta<-divAngle))) ? -1.0f : 1.0f;
-        //float dirFactor = (teta<0) ? -1.0f : 1.0f;
         oTorque = dirFactor*strengthT;
 
         //Torque influence as well diminish with distance
@@ -251,14 +248,14 @@ struct Model {
     }
 
     //////////////////////////////////////////////////////////////////////////////
-    void calculateForce_linearAttraction(float forceMagnitude, const sf::Vector2f& r, float rNorm, sf::Vector2f& force) {
-        force = r * (forceMagnitude / rNorm);
-    }
+    //void calculateForce_linearAttraction(float forceMagnitude, const sf::Vector2f& r, float rNorm, sf::Vector2f& force) {
+    //    force = r * (forceMagnitude / rNorm);
+    //}
 
     //////////////////////////////////////////////////////////////////////////////
-    void calculateForce_quadraticAttraction(float forceMagnitude, const sf::Vector2f& r, float rNorm, sf::Vector2f& force) {
-        force = r * (forceMagnitude / (rNorm*rNorm));
-    }
+    //void calculateForce_quadraticAttraction(float forceMagnitude, const sf::Vector2f& r, float rNorm, sf::Vector2f& force) {
+    //    force = r * (forceMagnitude / (rNorm*rNorm));
+    //}
 
     //////////////////////////////////////////////////////////////////////////////
     void step()
@@ -296,11 +293,6 @@ struct Model {
                         }
                     }
                 }
-                // Floc behavior
-                //p.velocity = multiply(p.velocity, 0.999);
-                //p.velocity += multiply(other.velocity, 0.0001);
-                //p.angularVelocity = p.angularVelocity * 0.999;
-                //p.angularVelocity += other.angularVelocity * 0.0001;
             }
 
             //Link forces
@@ -326,6 +318,7 @@ struct Model {
             if (p.position.y < -WORLD_HEIGTH/2) p.force += sf::Vector2f(0.0,0.1);
         }
 
+        // Update particles from forces
         for (auto& p : particles) {
             // Calculate the acceleration and angular acceleration (assuming mass and moment of inertia = 1)
             sf::Vector2f acceleration = p.force;
@@ -335,27 +328,34 @@ struct Model {
             // Using naive algo
             p.velocity = p.velocity + acceleration * dt;
             p.angularVelocity = p.angularVelocity + angularAcceleration * dt;
+
+            // Cap velocity
             float maxVelocity = 50.0;
             if (norm(p.velocity) > maxVelocity) {
                 normalize(p.velocity);
                 p.velocity *= maxVelocity;
             }
+
             //Force attract to center to incentive interactions
             if (g_centerize) {
                 p.velocity -= 0.001f * p.position;
             }
+
             //Sticky dissipative space and other limits
-            p.velocity = 0.99f * p.velocity;
+            p.velocity = 0.995f * p.velocity;
             p.angularVelocity *= 0.995f;
+
+            // Cap angular velocity
             float maxAngularVelocity = 10.0;
             if (p.angularVelocity > maxAngularVelocity) p.angularVelocity = maxAngularVelocity;
             if (p.angularVelocity < -maxAngularVelocity) p.angularVelocity = -maxAngularVelocity;
+
             p.position = p.position + p.velocity * dt;
             p.orientation = p.orientation + p.angularVelocity * dt;
 
             // Update the particle's shape position
             p.shape.setPosition(p.position);
-            //p.shape.setFillColor(getColor(p.type));
+            p.shape.setFillColor(getColor(p.type));
         }
     }
 };
@@ -363,6 +363,7 @@ struct Model {
 void drawModel(sf::RenderWindow& ioWindow, const Model& iModel) {
     for (const auto& p : iModel.particles)
     {
+        // Links
         //sf::VertexArray lines(sf::Lines, 2);
         //for (auto& other : p.linked) {
         //    lines[0].position = p.position;
@@ -372,6 +373,7 @@ void drawModel(sf::RenderWindow& ioWindow, const Model& iModel) {
             //ioWindow.draw(lines);
         //}
 
+        // Tail
         float tailLength = 10.0;
         sf::Vertex line[] =
         {
@@ -380,13 +382,14 @@ void drawModel(sf::RenderWindow& ioWindow, const Model& iModel) {
         };
         ioWindow.draw(line, 2, sf::Lines);
 
-        float mdLength = 30.0;
-        sf::Vertex linemd[] =
-        {
-            sf::Vertex(p.position, sf::Color::Yellow),
-            sf::Vertex(p.position + mdLength*unitVectorFromAngle(p.midAngle), sf::Color::Yellow)
-        };
-        ioWindow.draw(linemd, 2, sf::Lines);
+        // MidAngle debug
+        //float mdLength = 30.0;
+        //sf::Vertex linemd[] =
+        //{
+        //    sf::Vertex(p.position, sf::Color::Yellow),
+        //    sf::Vertex(p.position + mdLength*unitVectorFromAngle(p.midAngle), sf::Color::Yellow)
+        //};
+        //ioWindow.draw(linemd, 2, sf::Lines);
 
         //Force debug
         sf::Vertex lineF[] =
@@ -395,7 +398,6 @@ void drawModel(sf::RenderWindow& ioWindow, const Model& iModel) {
             sf::Vertex(p.position + 10.0f*p.force, sf::Color::Red)
         };
         //ioWindow.draw(lineF, 2, sf::Lines);
-
 
         //Speed debug
         //sf::Vertex lineV[] =
@@ -406,7 +408,7 @@ void drawModel(sf::RenderWindow& ioWindow, const Model& iModel) {
         //ioWindow.draw(lineV, 2, sf::Lines);
 
         ioWindow.draw(p.shape);
-        ioWindow.draw(lineF, 2, sf::Lines);
+        //ioWindow.draw(lineF, 2, sf::Lines);
         //ioWindow.draw(lines);
 
         //Draw interaction radius
@@ -417,34 +419,12 @@ void drawModel(sf::RenderWindow& ioWindow, const Model& iModel) {
         circle.setOrigin(g_interaction_radius, g_interaction_radius);
         circle.setPosition(p.position);
         ioWindow.draw(circle);
-
-        //Pole debug
-        /*
-        float teta = 1.5;
-        sf::Vector2f aRVect = unitVectorFromAngle(p.orientation+teta/2.0+M_PI/2.0);
-        sf::Vector2f aRPole = p.position + 5.0f * aRVect;
-        sf::Vector2f aLVect = unitVectorFromAngle(p.orientation-teta/2.0-M_PI/2.0);
-        sf::Vector2f aLPole = p.position + 5.0f * aLVect;
-        sf::CircleShape aRPoleDot(1);
-        aRPoleDot.setOrigin(1, 1);
-        aRPoleDot.setPosition(aRPole);
-        sf::CircleShape aLPoleDot(1);
-        aLPoleDot.setOrigin(1, 1);
-        aLPoleDot.setPosition(aLPole);
-        aRPoleDot.setFillColor(sf::Color::Red);
-        aLPoleDot.setFillColor(sf::Color::Red);
-        ioWindow.draw(aRPoleDot);
-        ioWindow.draw(aLPoleDot);
-        */
     }
 }
 
 // Main function
 int main()
 {
-    // Test
-    //std::cout << angleFromVector(sf::Vector2f(-1.0,-2.0)) << std::endl;
-
     // Create the main window
     sf::RenderWindow window(sf::VideoMode(WORLD_WIDTH, WORLD_HEIGTH), "Particle system");
 
@@ -507,7 +487,8 @@ int main()
         lastMousePos = window.mapPixelToCoords(sf::Mouse::getPosition(window));
 
         // Model update
-        myModel.step();
+        //for (int i=0; i<6; ++i)
+            myModel.step();
 
         // Clear screen
         window.clear();
