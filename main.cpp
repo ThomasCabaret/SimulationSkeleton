@@ -23,6 +23,13 @@ static sf::Vector2f DOT_OFSET = sf::Vector2f(DOT_SIZE, DOT_SIZE);
 static bool g_centerize = false;
 static float g_interaction_radius = 8.0f;//10.0f;
 static float g_temp_speed = 1.0f;
+static float g_dt = 0.1f;
+static int g_ksteps_per_frame = 10;
+static float g_void_viscosity = 0.999;
+static float g_containing_force = 1.0;
+static float g_div_angle = 0.3;
+static float g_s_f_strength = 1.0f;
+static float g_s_viscosity = 0.8f;
 
 // Simple struct to hold particle data
 struct Particle {
@@ -185,7 +192,7 @@ struct Model {
             p.velocity = sf::Vector2f(disV(gen), disV(gen));
             p.orientation = disA(gen);
             p.angularVelocity = 0.0;
-            p.type = disType(gen);
+            p.type = 2;//disType(gen);
             p.shape = sf::CircleShape(DOT_SIZE);
             p.shape.setOrigin(DOT_SIZE, DOT_SIZE);
             p.shape.setPosition(p.position);
@@ -207,9 +214,7 @@ struct Model {
         float orientation2 = other.orientation;
 
         // The interaction strength
-        float strengthF = 1.0f;
         float strengthT = 1.0f;
-        float divAngle = 0.3;
         float teta = orientation2 - orientation1;
         // Make sure it is between -pi and pi
         while (teta > M_PI) teta -= 2 * M_PI;
@@ -223,12 +228,12 @@ struct Model {
         //f(teta, phi) = f(-teta, phi-teta+pi) //action reaction symmetry)
         //f(teta, phi) = f(-teta, -phi) //mirror symmetry
         float anisoFactor = 1.0f;//sin(teta)*sin(phi)+sin(teta)*sin(phi-teta) + 1.6f;
-        if (((2*phi-teta+M_PI)*(2*phi-teta+M_PI)+teta*teta) < 2.0*divAngle*divAngle) anisoFactor = -1.0f;
+        if (((2*phi-teta+M_PI)*(2*phi-teta+M_PI)+teta*teta) < 2.0*g_div_angle*g_div_angle) anisoFactor = -1.0f;
         //2*phi-teta is an invariant angle in an interacting pair
         float rotatorFactor = sin(2*phi-teta+M_PI);//(sin(teta)*sin(phi)+sin(teta)*sin(phi-teta))/2.0f;// * M_PI;
         float distanceFactor = 1.0f / std::pow(rNorm, 2);
 
-        oForce = rotateVector(r, rotatorFactor) * (10.0f*rotatorFactor*rotatorFactor + 1.0f) * strengthF * anisoFactor * distanceFactor;
+        oForce = rotateVector(r, rotatorFactor) * (10.0f*rotatorFactor*rotatorFactor + 1.0f) * g_s_f_strength * anisoFactor * distanceFactor;
 
         //Something like (phi>0)
         float midAngle = middleAngle(orientation1, orientation2);
@@ -237,8 +242,8 @@ struct Model {
         //Debug left right
         //if(isLeft) {p.shape.setFillColor(sf::Color::Red);} else {p.shape.setFillColor(sf::Color::Blue);}
 
-        float leftTargetOffset = (-teta-divAngle)/2.0;
-        float righTargetOffset = (-teta+divAngle)/2.0;
+        float leftTargetOffset = (-teta-g_div_angle)/2.0;
+        float righTargetOffset = (-teta+g_div_angle)/2.0;
         while (leftTargetOffset > M_PI) leftTargetOffset -= 2 * M_PI;
         while (leftTargetOffset < -M_PI) leftTargetOffset += 2 * M_PI;
         while (righTargetOffset > M_PI) righTargetOffset -= 2 * M_PI;
@@ -251,7 +256,7 @@ struct Model {
 
         //Mutual viscosity system (particles try to slow to the center of mass of the system)
         //TODO repulsion should be an exception!
-        oForce += ((p.velocity+other.velocity)/2.0f-p.velocity)*0.8f;
+        oForce += ((p.velocity+other.velocity)/2.0f-p.velocity)*g_s_viscosity;
     }
 
     //////////////////////////////////////////////////////////////////////////////
@@ -267,8 +272,6 @@ struct Model {
     //////////////////////////////////////////////////////////////////////////////
     void step()
     {
-        float dt = 0.01;
-
         // Calculate the force and torque on particle p due to all other particles
         for (auto& p : particles) {
 
@@ -318,22 +321,21 @@ struct Model {
                 }
             }*/
 
-            // Containing forces
-            float amp = 2.0;
-            if (p.position.x > WORLD_WIDTH/2) p.force += sf::Vector2f(-amp,0.0);
-            if (p.position.x < -WORLD_WIDTH/2) p.force += sf::Vector2f(amp,0.0);
-            if (p.position.y > WORLD_HEIGTH/2) p.force += sf::Vector2f(0.0,-amp);
-            if (p.position.y < -WORLD_HEIGTH/2) p.force += sf::Vector2f(0.0,amp);
+            // Containing forces //could be constrained by direction of v as well
+            if (p.position.x > WORLD_WIDTH/2) p.force += sf::Vector2f(-g_containing_force,0.0);
+            if (p.position.x < -WORLD_WIDTH/2) p.force += sf::Vector2f(g_containing_force,0.0);
+            if (p.position.y > WORLD_HEIGTH/2) p.force += sf::Vector2f(0.0,-g_containing_force);
+            if (p.position.y < -WORLD_HEIGTH/2) p.force += sf::Vector2f(0.0,g_containing_force);
 
             // Brownian motion model
             // Particle are boosted in the direction of their velocity below a given value.
             // + a rotation perturbation
             if (norm(p.velocity) <= g_temp_speed)
             {
-                p.force += 0.1f*p.velocity / dt;
+                p.force += 0.1f*p.velocity / g_dt;
             }
-            std::uniform_real_distribution<> disBrownian(-1.0, 1.0);
-            p.force += sf::Vector2f(disBrownian(gen), disBrownian(gen));
+            //std::uniform_real_distribution<> disBrownian(-1.0, 1.0);
+            //p.force += sf::Vector2f(disBrownian(gen), disBrownian(gen));
         }
 
         // Update particles from forces
@@ -343,11 +345,11 @@ struct Model {
             float angularAcceleration = p.torque;
 
             // Using naive algo
-            p.velocity = p.velocity + acceleration * dt;
-            p.angularVelocity = p.angularVelocity + angularAcceleration * dt;
+            p.velocity = p.velocity + acceleration * g_dt;
+            p.angularVelocity = p.angularVelocity + angularAcceleration * g_dt;
 
             // Cap velocity
-            float maxVelocity = 50.0;
+            float maxVelocity = 10.0;
             if (norm(p.velocity) > maxVelocity) {
                 normalize(p.velocity);
                 p.velocity *= maxVelocity;
@@ -364,12 +366,12 @@ struct Model {
             }
 
             //Sticky dissipative space and other limits
-            p.velocity = 0.99995f * p.velocity;
+            p.velocity = g_void_viscosity * p.velocity;
             p.angularVelocity *= 0.995f;
 
             // Update
-            p.position = p.position + p.velocity * dt;
-            p.orientation = p.orientation + p.angularVelocity * dt;
+            p.position = p.position + p.velocity * g_dt;
+            p.orientation = p.orientation + p.angularVelocity * g_dt;
 
             // Update the particle's shape position
             p.shape.setPosition(p.position);
@@ -447,8 +449,8 @@ int main()
     // Create the main window
     sf::RenderWindow window(sf::VideoMode(1920, 1080), "Particle system");
     ImGui::SFML::Init(window);
-    ImGui::GetStyle().ScaleAllSizes(3.0f);
-    ImGui::GetIO().FontGlobalScale = 3.0f;
+    ImGui::GetStyle().ScaleAllSizes(2.0f);
+    ImGui::GetIO().FontGlobalScale = 2.0f;
 
     // Model
     Model myModel;
@@ -510,7 +512,21 @@ int main()
 
         //GUI
         ImGui::Begin("Demo window");
-        ImGui::SliderFloat("Speed", &g_temp_speed, 0.0f, 10.0f);
+        float fps = 1.0f / ImGui::GetIO().DeltaTime;
+        ImGui::Text("FPS: %.1f", fps);
+        if (ImGui::InputInt("Steps per frame", &g_ksteps_per_frame)) {
+            if (g_ksteps_per_frame < 1) {
+                g_ksteps_per_frame = 1;
+            }
+        }
+        ImGui::SliderFloat("dt", &g_dt, 0.0f, 1.0f);
+        ImGui::SliderFloat("Containing force", &g_containing_force, 0.0f, 2.0f);
+        ImGui::SliderFloat("Brownian speed", &g_temp_speed, 0.0f, 10.0f);
+        ImGui::SliderFloat("Void viscosity", &g_void_viscosity, 0.99f, 1.0f);
+        ImGui::SliderFloat("S interaction radius", &g_interaction_radius, 4.0f, 20.0f);
+        ImGui::SliderFloat("S force strength", &g_s_f_strength, 0.0f, 5.0f);
+        ImGui::SliderFloat("S div angle", &g_div_angle, 0.0, 0.4);
+        ImGui::SliderFloat("S mutual viscosity", &g_s_viscosity, 0.0, 4.0f);
         ImGui::End();
 
         // Check for mouse dragging
@@ -528,7 +544,7 @@ int main()
         lastMousePos = window.mapPixelToCoords(sf::Mouse::getPosition(window));
 
         // Model update
-        //for (int i=0; i<6; ++i)
+        for (int i=0; i<g_ksteps_per_frame; ++i)
             myModel.step();
 
         // Clear screen
