@@ -2,6 +2,7 @@
 #include "imgui-SFML.h"
 #include <SFML/Graphics.hpp>
 #include <vector>
+#include <list>
 #include <thread>
 #include <random>
 #include <cmath>
@@ -13,7 +14,7 @@
 #endif
 
 
-static int K_PARTICLES = 100;
+static int K_INIT_PARTICLES = 1;
 static int WORLD_WIDTH = 480;//960;//1920;
 static int WORLD_HEIGTH = 270;//540;//1080;
 static int DOT_SIZE = 2;
@@ -29,7 +30,10 @@ static float g_void_viscosity = 0.999;
 static float g_containing_force = 1.0;
 static float g_div_angle = 0.3;
 static float g_s_f_strength = 1.0f;
-static float g_s_viscosity = 0.8f;
+static float g_s_t_strength = 1.0f;
+static float g_s_f_exp_power = 3.0f;
+static float g_s_f_viscosity = 0.8f;
+static float g_s_t_viscosity = 0.0;
 
 // Simple struct to hold particle data
 struct Particle {
@@ -165,7 +169,7 @@ sf::Color getColor(int type) {
 }
 
 struct Model {
-    std::vector<Particle> particles; //BAD choice of container if dynamic
+    std::list<Particle> particles; //BAD choice of container if dynamic
     std::random_device rd;
     std::mt19937 gen;
 
@@ -176,28 +180,31 @@ struct Model {
 
     void init()
     {
-        // Initialize random number generator
+        // Initialize particles
+        particles.clear();
+        for (int i = 0; i < K_INIT_PARTICLES; ++i) {
+            spawn();
+        }
+    }
+
+    void spawn()
+    {
         std::uniform_int_distribution<> disType(0, K_NB_TYPE-1);
-        std::uniform_real_distribution<> disX(-WORLD_WIDTH/4, WORLD_WIDTH/4);
-        std::uniform_real_distribution<> disY(-WORLD_HEIGTH/4, WORLD_HEIGTH/4);
+        std::uniform_real_distribution<> disX(-WORLD_WIDTH/32, WORLD_WIDTH/32);
+        std::uniform_real_distribution<> disY(-WORLD_HEIGTH/32, WORLD_HEIGTH/32);
         std::uniform_real_distribution<> disV(-2, 2);
         std::uniform_real_distribution<> disA(0, 2.0*M_PI);
 
-        // Initialize particles
-        particles.clear();
-        particles.reserve(K_PARTICLES); //BAD choice of container if dynamic
-        for (int i = 0; i < K_PARTICLES; ++i) {
-            Particle p;
-            p.position = sf::Vector2f(disX(gen), disY(gen));
-            p.velocity = sf::Vector2f(disV(gen), disV(gen));
-            p.orientation = disA(gen);
-            p.angularVelocity = 0.0;
-            p.type = 2;//disType(gen);
-            p.shape = sf::CircleShape(DOT_SIZE);
-            p.shape.setOrigin(DOT_SIZE, DOT_SIZE);
-            p.shape.setPosition(p.position);
-            particles.push_back(p);
-        }
+        Particle p;
+        p.position = sf::Vector2f(disX(gen), disY(gen));
+        p.velocity = sf::Vector2f(disV(gen), disV(gen));
+        p.orientation = disA(gen);
+        p.angularVelocity = 0.0;
+        p.type = 2;//disType(gen);
+        p.shape = sf::CircleShape(DOT_SIZE);
+        p.shape.setOrigin(DOT_SIZE, DOT_SIZE);
+        p.shape.setPosition(p.position);
+        particles.push_back(p);
     }
 
     //////////////////////////////////////////////////////////////////////////////
@@ -214,7 +221,6 @@ struct Model {
         float orientation2 = other.orientation;
 
         // The interaction strength
-        float strengthT = 1.0f;
         float teta = orientation2 - orientation1;
         // Make sure it is between -pi and pi
         while (teta > M_PI) teta -= 2 * M_PI;
@@ -231,7 +237,7 @@ struct Model {
         if (((2*phi-teta+M_PI)*(2*phi-teta+M_PI)+teta*teta) < 2.0*g_div_angle*g_div_angle) anisoFactor = -1.0f;
         //2*phi-teta is an invariant angle in an interacting pair
         float rotatorFactor = sin(2*phi-teta+M_PI);//(sin(teta)*sin(phi)+sin(teta)*sin(phi-teta))/2.0f;// * M_PI;
-        float distanceFactor = 1.0f / std::pow(rNorm, 2);
+        float distanceFactor = 1.0f / std::pow(rNorm, g_s_f_exp_power);
 
         oForce = rotateVector(r, rotatorFactor) * (10.0f*rotatorFactor*rotatorFactor + 1.0f) * g_s_f_strength * anisoFactor * distanceFactor;
 
@@ -249,14 +255,15 @@ struct Model {
         while (righTargetOffset > M_PI) righTargetOffset -= 2 * M_PI;
         while (righTargetOffset < -M_PI) righTargetOffset += 2 * M_PI;
         float dirFactor = ((isLeft && (leftTargetOffset<0)) || (!isLeft && (righTargetOffset<0))) ? 1.0f : -1.0f;
-        oTorque = dirFactor*strengthT;
+        oTorque = dirFactor*g_s_t_strength;
 
         //Torque influence as well diminish with distance
         oTorque = oTorque/(rNorm);
 
         //Mutual viscosity system (particles try to slow to the center of mass of the system)
         //TODO repulsion should be an exception!
-        oForce += ((p.velocity+other.velocity)/2.0f-p.velocity)*g_s_viscosity;
+        oForce += ((p.velocity+other.velocity)/2.0f-p.velocity)*g_s_f_viscosity;
+        oTorque += ((p.angularVelocity+other.angularVelocity)/2.0f-p.angularVelocity)*g_s_t_viscosity;
     }
 
     //////////////////////////////////////////////////////////////////////////////
@@ -273,8 +280,8 @@ struct Model {
     void step()
     {
         // Calculate the force and torque on particle p due to all other particles
-        for (auto& p : particles) {
-
+        for (auto itp = particles.begin(); itp != particles.end();) {
+            auto& p = *itp;
             p.force = sf::Vector2f(0.0, 0.0);
             p.torque = 0.0;
 
@@ -322,10 +329,15 @@ struct Model {
             }*/
 
             // Containing forces //could be constrained by direction of v as well
-            if (p.position.x > WORLD_WIDTH/2) p.force += sf::Vector2f(-g_containing_force,0.0);
-            if (p.position.x < -WORLD_WIDTH/2) p.force += sf::Vector2f(g_containing_force,0.0);
-            if (p.position.y > WORLD_HEIGTH/2) p.force += sf::Vector2f(0.0,-g_containing_force);
-            if (p.position.y < -WORLD_HEIGTH/2) p.force += sf::Vector2f(0.0,g_containing_force);
+            //if (p.position.x > WORLD_WIDTH/2) p.force += sf::Vector2f(-g_containing_force,0.0);
+            //if (p.position.x < -WORLD_WIDTH/2) p.force += sf::Vector2f(g_containing_force,0.0);
+            //if (p.position.y > WORLD_HEIGTH/2) p.force += sf::Vector2f(0.0,-g_containing_force);
+            //if (p.position.y < -WORLD_HEIGTH/2) p.force += sf::Vector2f(0.0,g_containing_force);
+            // Containing delete
+            if ((p.position.x > WORLD_WIDTH/2) || (p.position.x < -WORLD_WIDTH/2) || (p.position.y > WORLD_HEIGTH/2) || (p.position.y < -WORLD_HEIGTH/2)) {
+                itp = particles.erase(itp);
+                continue;
+            }
 
             // Brownian motion model
             // Particle are boosted in the direction of their velocity below a given value.
@@ -336,6 +348,9 @@ struct Model {
             }
             //std::uniform_real_distribution<> disBrownian(-1.0, 1.0);
             //p.force += sf::Vector2f(disBrownian(gen), disBrownian(gen));
+
+            //Done here because it's an erase loop
+            ++itp;
         }
 
         // Update particles from forces
@@ -367,7 +382,7 @@ struct Model {
 
             //Sticky dissipative space and other limits
             p.velocity = g_void_viscosity * p.velocity;
-            p.angularVelocity *= 0.995f;
+            p.angularVelocity *= 0.99f;
 
             // Update
             p.position = p.position + p.velocity * g_dt;
@@ -439,8 +454,8 @@ void drawModel(sf::RenderWindow& ioWindow, const sf::RectangleShape& iWorldRect,
         circle.setOrigin(g_interaction_radius, g_interaction_radius);
         circle.setPosition(p.position);
         ioWindow.draw(circle);
-        ioWindow.draw(iWorldRect);
     }
+    ioWindow.draw(iWorldRect);
 }
 
 // Main function
@@ -505,6 +520,8 @@ int main()
             case sf::Event::KeyPressed:
                 if (event.key.code == sf::Keyboard::C)
                     g_centerize = !g_centerize;
+                if (event.key.code == sf::Keyboard::S)
+                    myModel.spawn();
                 break;
             }
         }
@@ -525,8 +542,11 @@ int main()
         ImGui::SliderFloat("Void viscosity", &g_void_viscosity, 0.99f, 1.0f);
         ImGui::SliderFloat("S interaction radius", &g_interaction_radius, 4.0f, 20.0f);
         ImGui::SliderFloat("S force strength", &g_s_f_strength, 0.0f, 5.0f);
+        ImGui::SliderFloat("S force exp power", &g_s_f_exp_power, 1.0f, 5.0f);
+        ImGui::SliderFloat("S torque strength", &g_s_t_strength, 0.0f, 2.0f);
         ImGui::SliderFloat("S div angle", &g_div_angle, 0.0, 0.4);
-        ImGui::SliderFloat("S mutual viscosity", &g_s_viscosity, 0.0, 4.0f);
+        ImGui::SliderFloat("S force viscosity", &g_s_f_viscosity, 0.0, 4.0f);
+        ImGui::SliderFloat("S torque viscosity", &g_s_t_viscosity, 0.0, 4.0f);
         ImGui::End();
 
         // Check for mouse dragging
