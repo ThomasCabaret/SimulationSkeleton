@@ -23,7 +23,7 @@ static sf::Vector2f DOT_OFSET = sf::Vector2f(DOT_SIZE, DOT_SIZE);
 
 static bool g_centerize = false;
 static float g_interaction_radius = 8.0f;//10.0f;
-static float g_temp_speed = 1.0f;
+static float g_temp_speed = 0.0f;
 static float g_dt = 0.1f;
 static int g_ksteps_per_frame = 10;
 static float g_void_viscosity = 0.999;
@@ -34,6 +34,7 @@ static float g_s_t_strength = 1.0f;
 static float g_s_f_exp_power = 3.0f;
 static float g_s_f_viscosity = 0.8f;
 static float g_s_t_viscosity = 0.0;
+static float g_opposition_threshold = 0.1;
 
 // Simple struct to hold particle data
 struct Particle {
@@ -192,7 +193,7 @@ struct Model {
         std::uniform_int_distribution<> disType(0, K_NB_TYPE-1);
         std::uniform_real_distribution<> disX(-WORLD_WIDTH/32, WORLD_WIDTH/32);
         std::uniform_real_distribution<> disY(-WORLD_HEIGTH/32, WORLD_HEIGTH/32);
-        std::uniform_real_distribution<> disV(-2, 2);
+        std::uniform_real_distribution<> disV(-0.5, 0.5);
         std::uniform_real_distribution<> disA(0, 2.0*M_PI);
 
         Particle p;
@@ -226,15 +227,25 @@ struct Model {
         while (teta > M_PI) teta -= 2 * M_PI;
         while (teta < -M_PI) teta += 2 * M_PI;
         float phi = angleFromVector(r) - orientation1;
+        float anti_phi = angleFromVector(-r) - orientation2;
         // Make sure it is between -pi and pi
         while (phi > M_PI) phi -= 2 * M_PI;
         while (phi < -M_PI) phi += 2 * M_PI;
+        while (anti_phi > M_PI) anti_phi -= 2 * M_PI;
+        while (anti_phi < -M_PI) anti_phi += 2 * M_PI;
+
+        float opposition = std::max(std::abs(phi), std::abs(anti_phi));
 
         //Here I need a f such that:
         //f(teta, phi) = f(-teta, phi-teta+pi) //action reaction symmetry)
         //f(teta, phi) = f(-teta, -phi) //mirror symmetry
         float anisoFactor = 1.0f;//sin(teta)*sin(phi)+sin(teta)*sin(phi-teta) + 1.6f;
-        if (((2*phi-teta+M_PI)*(2*phi-teta+M_PI)+teta*teta) < 2.0*g_div_angle*g_div_angle) anisoFactor = -1.0f;
+        if (opposition < g_opposition_threshold-0.1) {
+            anisoFactor = -1.0f;
+        } else if (opposition < g_opposition_threshold+0.1) {
+            anisoFactor = (opposition - (g_opposition_threshold-0.1)/(2*0.1))*2.0-1.0; //supposed to be in -1.0 1.0
+        }
+        //if (((2*phi-teta+M_PI)*(2*phi-teta+M_PI)+teta*teta) < 2.0*g_div_angle*g_div_angle) anisoFactor = -1.0f;
         //2*phi-teta is an invariant angle in an interacting pair
         float rotatorFactor = sin(2*phi-teta+M_PI);//(sin(teta)*sin(phi)+sin(teta)*sin(phi-teta))/2.0f;// * M_PI;
         float distanceFactor = 1.0f / std::pow(rNorm, g_s_f_exp_power);
@@ -344,7 +355,7 @@ struct Model {
             // + a rotation perturbation
             if (norm(p.velocity) <= g_temp_speed)
             {
-                p.force += 0.1f*p.velocity / g_dt;
+                p.force += 0.01f*p.velocity / g_dt;
             }
             //std::uniform_real_distribution<> disBrownian(-1.0, 1.0);
             //p.force += sf::Vector2f(disBrownian(gen), disBrownian(gen));
@@ -547,6 +558,9 @@ int main()
         ImGui::SliderFloat("S div angle", &g_div_angle, 0.0, 0.4);
         ImGui::SliderFloat("S force viscosity", &g_s_f_viscosity, 0.0, 4.0f);
         ImGui::SliderFloat("S torque viscosity", &g_s_t_viscosity, 0.0, 4.0f);
+        ImGui::SliderFloat("S opposition threshold", &g_opposition_threshold, 0.0, 7.0f);
+        ImGui::Text("S key to spawn");
+        ImGui::Text("C key to center");
         ImGui::End();
 
         // Check for mouse dragging
