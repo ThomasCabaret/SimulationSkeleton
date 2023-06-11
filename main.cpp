@@ -14,7 +14,7 @@
 #endif
 
 
-static int K_INIT_PARTICLES = 1;
+static int K_INIT_PARTICLES = 0;
 static int WORLD_WIDTH = 480;//960;//1920;
 static int WORLD_HEIGTH = 270;//540;//1080;
 static int DOT_SIZE = 2;
@@ -184,9 +184,9 @@ sf::Color getColor(const ParticleType& iParticleType) {
     case A:
         return sf::Color::Red;
     case B:
-        return sf::Color(255, 165, 0); // RGB values for orange
+        return sf::Color::Magenta;
     case S:
-        return sf::Color::Yellow;
+        return sf::Color(255, 200, 0); // RGB values for yolk
     default:
         return sf::Color::White; // Return black if none of the above
     }
@@ -354,8 +354,7 @@ struct Model {
                             // Negative for repulsion
                             //calculateForce_quadraticAttraction(-0.001, r, rNorm, force);
                             float factor = std::pow(2.0*DOT_SIZE/rNorm, 6);
-                                p.force += -r * factor;
-                            if (p.type != ParticleType::S) force *= 10.0f;
+                                p.force += -r * factor * (p.type != ParticleType::S ? 10.0f : 0.001f);
                             p.force += force;
                         }
                     } else if ((p.type == ParticleType::A && other.type == ParticleType::F) ||
@@ -395,26 +394,38 @@ struct Model {
                 }
             }*/
 
-            // Containing forces //could be constrained by direction of v as well
-            //if (p.position.x > WORLD_WIDTH/2) p.force += sf::Vector2f(-g_containing_force,0.0);
-            //if (p.position.x < -WORLD_WIDTH/2) p.force += sf::Vector2f(g_containing_force,0.0);
-            //if (p.position.y > WORLD_HEIGTH/2) p.force += sf::Vector2f(0.0,-g_containing_force);
-            //if (p.position.y < -WORLD_HEIGTH/2) p.force += sf::Vector2f(0.0,g_containing_force);
-            // Containing delete
-            if ((p.position.x > WORLD_WIDTH/2) || (p.position.x < -WORLD_WIDTH/2) || (p.position.y > WORLD_HEIGTH/2) || (p.position.y < -WORLD_HEIGTH/2)) {
-                itp = particles.erase(itp);
-                continue;
+            if (p.type == ParticleType::S) {
+                // Containing delete
+                if ((p.position.x > WORLD_WIDTH/2) || (p.position.x < -WORLD_WIDTH/2) || (p.position.y > WORLD_HEIGTH/2) || (p.position.y < -WORLD_HEIGTH/2)) {
+                    itp = particles.erase(itp);
+                    continue;
+                }
+            } else {
+                // Containing forces //could be constrained by direction of v as well
+                if (p.position.x > WORLD_WIDTH/2) p.force += sf::Vector2f(-g_containing_force,0.0);
+                if (p.position.x < -WORLD_WIDTH/2) p.force += sf::Vector2f(g_containing_force,0.0);
+                if (p.position.y > WORLD_HEIGTH/2) p.force += sf::Vector2f(0.0,-g_containing_force);
+                if (p.position.y < -WORLD_HEIGTH/2) p.force += sf::Vector2f(0.0,g_containing_force);
             }
 
             // Brownian motion model
             // Particle are boosted in the direction of their velocity below a given value.
             // + a rotation perturbation
-            if (norm(p.velocity) <= g_temp_speed)
-            {
-                p.force += 0.01f*p.velocity / g_dt;
+            if (p.type == ParticleType::S) {
+                if (norm(p.velocity) <= g_temp_speed)
+                {
+                    p.force += 0.01f*p.velocity / g_dt;
+                }
+                //std::uniform_real_distribution<> disBrownian(-0.01, 0.01);
+                //p.force += sf::Vector2f(disBrownian(gen), disBrownian(gen));
+            } else {
+                if (norm(p.velocity) <= 1.0)
+                {
+                    p.force += 0.01f*p.velocity / g_dt;
+                }
+                std::uniform_real_distribution<> disBrownian(-0.01, 0.01);
+                p.force += sf::Vector2f(disBrownian(gen), disBrownian(gen));
             }
-            std::uniform_real_distribution<> disBrownian(-0.01, 0.01);
-            p.force += sf::Vector2f(disBrownian(gen), disBrownian(gen));
 
             //Done here because it's an erase loop
             ++itp;
@@ -589,6 +600,8 @@ int main()
                     isDragging = false;
                 break;
             case sf::Event::KeyPressed:
+                if (event.key.code == sf::Keyboard::R)
+                    myModel.particles.clear();
                 if (event.key.code == sf::Keyboard::C)
                     g_centerize = !g_centerize;
                 if (event.key.code == sf::Keyboard::S)
@@ -608,6 +621,7 @@ int main()
         ImGui::Begin("Demo window");
         float fps = 1.0f / ImGui::GetIO().DeltaTime;
         ImGui::Text("FPS: %.1f", fps);
+        ImGui::Text("Population: %d", myModel.particles.size());
         if (ImGui::InputInt("Steps per frame", &g_ksteps_per_frame)) {
             if (g_ksteps_per_frame < 1) {
                 g_ksteps_per_frame = 1;
@@ -628,6 +642,7 @@ int main()
         ImGui::SliderFloat("S opposition threshold", &g_opposition_threshold, 0.0, 7.0f);
         ImGui::Text("S,F,A,B key to spawn particles");
         ImGui::Text("C key to center");
+        ImGui::Text("R key to reset");
         ImGui::End();
 
         // Check for mouse dragging
