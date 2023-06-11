@@ -35,6 +35,14 @@ static float g_s_f_exp_power = 3.0f;
 static float g_s_f_viscosity = 0.8f;
 static float g_s_t_viscosity = 0.0;
 static float g_opposition_threshold = 0.1;
+static float g_center_force = 0.0001f;
+
+enum ParticleType {
+    F,
+    A,
+    B,
+    S
+};
 
 // Simple struct to hold particle data
 struct Particle {
@@ -45,7 +53,7 @@ struct Particle {
     float angularVelocity;
     sf::Vector2f force;
     float torque;
-    int type;
+    ParticleType type;
     //bool isLeft;
     //std::vector<Particle*> linked;
     //Having view relating object in the model object is not ideal
@@ -138,7 +146,7 @@ double middleAngle(double theta1, double theta2) {
 }
 
 //////////////////////////////////////////////////////////////////////////////
-sf::Color getColor(int type) {
+/*sf::Color getColor(int type) {
     // Convert the type to a hue value between 0 and 360 degrees
     float hue = (type % K_NB_TYPE) * (360.0f / 16.0f);
 
@@ -167,6 +175,21 @@ sf::Color getColor(int type) {
     }
 
     return sf::Color((r + m) * 255, (g + m) * 255, (b + m) * 255);
+}*/
+
+sf::Color getColor(const ParticleType& iParticleType) {
+    switch (iParticleType) {
+    case F:
+        return sf::Color::Green;
+    case A:
+        return sf::Color::Red;
+    case B:
+        return sf::Color(255, 165, 0); // RGB values for orange
+    case S:
+        return sf::Color::Yellow;
+    default:
+        return sf::Color::White; // Return black if none of the above
+    }
 }
 
 struct Model {
@@ -184,11 +207,11 @@ struct Model {
         // Initialize particles
         particles.clear();
         for (int i = 0; i < K_INIT_PARTICLES; ++i) {
-            spawn();
+            spawn(ParticleType::A);
         }
     }
 
-    void spawn()
+    void spawn(const ParticleType& iParticleType)
     {
         std::uniform_int_distribution<> disType(0, K_NB_TYPE-1);
         std::uniform_real_distribution<> disX(-WORLD_WIDTH/32, WORLD_WIDTH/32);
@@ -201,7 +224,7 @@ struct Model {
         p.velocity = sf::Vector2f(disV(gen), disV(gen));
         p.orientation = disA(gen);
         p.angularVelocity = 0.0;
-        p.type = 2;//disType(gen);
+        p.type = iParticleType;
         p.shape = sf::CircleShape(DOT_SIZE);
         p.shape.setOrigin(DOT_SIZE, DOT_SIZE);
         p.shape.setPosition(p.position);
@@ -283,9 +306,9 @@ struct Model {
     //}
 
     //////////////////////////////////////////////////////////////////////////////
-    //void calculateForce_quadraticAttraction(float forceMagnitude, const sf::Vector2f& r, float rNorm, sf::Vector2f& force) {
-    //    force = r * (forceMagnitude / (rNorm*rNorm));
-    //}
+    void calculateForce_quadraticAttraction(float forceMagnitude, const sf::Vector2f& r, float rNorm, sf::Vector2f& force) {
+        force = r * (forceMagnitude / (rNorm*rNorm));
+    }
 
     //////////////////////////////////////////////////////////////////////////////
     void step()
@@ -301,23 +324,56 @@ struct Model {
                 if (&other != &p) {  // Avoid self-interaction
                     sf::Vector2f r = other.position - p.position;
                     float rNorm = norm(r);
-                    if (rNorm < g_interaction_radius) {  // Consider only particles within the interaction radius
-                        // Calculate force and torque using appropriate model
-                        sf::Vector2f force(0.0, 0.0);
-                        float torque = 0.0;
-                        //Force model for vesicle formation
-                        calculateForceAndTorque_polar1(p, other,
-                                                       r, rNorm,
-                                                       force, torque);
+                    sf::Vector2f force(0.0, 0.0);
+                    float torque = 0.0;
+                    // Surfactant molecules S interaction model
+                    if (p.type == ParticleType::S && other.type == ParticleType::S)
+                    {
+                        if (rNorm < g_interaction_radius) {  // Consider only particles within the interaction radius
+                            // Calculate force and torque using appropriate model
+                            //Force model for vesicle formation
+                            calculateForceAndTorque_polar1(p, other,
+                                                           r, rNorm,
+                                                           force, torque);
 
-                        p.force += force;
-                        p.torque += torque;
+                            p.force += force;
+                            p.torque += torque;
 
-                        //Solid repulsion
-                        if (rNorm < 2.0*2.0*DOT_SIZE) //The first 2 is for progressive smoothing
-                        {
-                            float factor = std::pow(2.0*DOT_SIZE/rNorm, 9);
-                            p.force += -r * factor;
+                           //Solid repulsion
+                           if (rNorm < 2.0*2.0*DOT_SIZE) //The first 2 is for progressive smoothing
+                           {
+                               float factor = std::pow(2.0*DOT_SIZE/rNorm, 9);
+                                p.force += -r * factor;
+                           }
+                        }
+                    } else if ((p.type == ParticleType::S && (other.type == ParticleType::A || other.type == ParticleType::B)) ||
+                              (other.type == ParticleType::S && (p.type == ParticleType::A || p.type == ParticleType::B)))
+                    {
+                        // Surfactant molecules S walling model
+                        if (rNorm < g_interaction_radius) {
+                            // Negative for repulsion
+                            //calculateForce_quadraticAttraction(-0.001, r, rNorm, force);
+                            float factor = std::pow(2.0*DOT_SIZE/rNorm, 6);
+                                p.force += -r * factor;
+                            if (p.type != ParticleType::S) force *= 10.0f;
+                            p.force += force;
+                        }
+                    } else if ((p.type == ParticleType::A && other.type == ParticleType::F) ||
+                               (other.type == ParticleType::A && p.type == ParticleType::F))
+                    {
+                        //Chemical force 1: F makes B when catalysed by A
+                        if (rNorm < g_interaction_radius/2.0) {
+                            //Maybe TODO a commit mecahnism
+                            if (p.type == ParticleType::F) p.type = ParticleType::B;
+                            if (other.type == ParticleType::F) other.type = ParticleType::B;
+                        }
+                    } else if ((p.type == ParticleType::B && other.type == ParticleType::F) ||
+                               (other.type == ParticleType::B && p.type == ParticleType::F))
+                    {
+                        //Chemical force 2: F + B makes A + S
+                        if (rNorm < g_interaction_radius/2.0) {
+                            p.type = ParticleType::A;
+                            other.type = ParticleType::S;
                         }
                     }
                 }
@@ -357,8 +413,8 @@ struct Model {
             {
                 p.force += 0.01f*p.velocity / g_dt;
             }
-            //std::uniform_real_distribution<> disBrownian(-1.0, 1.0);
-            //p.force += sf::Vector2f(disBrownian(gen), disBrownian(gen));
+            std::uniform_real_distribution<> disBrownian(-0.01, 0.01);
+            p.force += sf::Vector2f(disBrownian(gen), disBrownian(gen));
 
             //Done here because it's an erase loop
             ++itp;
@@ -388,7 +444,7 @@ struct Model {
 
             //Force attract to center to incentive interactions
             if (g_centerize) {
-                p.velocity -= 0.001f * p.position;
+                p.velocity -= g_center_force * p.position;
             }
 
             //Sticky dissipative space and other limits
@@ -420,13 +476,15 @@ void drawModel(sf::RenderWindow& ioWindow, const sf::RectangleShape& iWorldRect,
         //}
 
         // Tail
-        float tailLength = 10.0;
-        sf::Vertex line[] =
-        {
-            sf::Vertex(p.position, sf::Color::White),
-            sf::Vertex(p.position + tailLength*unitVectorFromAngle(p.orientation), sf::Color::White)
-        };
-        ioWindow.draw(line, 2, sf::Lines);
+        if (p.type == ParticleType::S) {
+            float tailLength = 10.0;
+            sf::Vertex line[] =
+            {
+                sf::Vertex(p.position, sf::Color::White),
+                sf::Vertex(p.position + tailLength*unitVectorFromAngle(p.orientation), sf::Color::White)
+            };
+            ioWindow.draw(line, 2, sf::Lines);
+        }
 
         // MidAngle debug
         //float mdLength = 30.0;
@@ -438,11 +496,11 @@ void drawModel(sf::RenderWindow& ioWindow, const sf::RectangleShape& iWorldRect,
         //ioWindow.draw(linemd, 2, sf::Lines);
 
         //Force debug
-        sf::Vertex lineF[] =
-        {
-            sf::Vertex(p.position, sf::Color::Red),
-            sf::Vertex(p.position + 10.0f*p.force, sf::Color::Red)
-        };
+        //sf::Vertex lineF[] =
+        //{
+        //    sf::Vertex(p.position, sf::Color::Red),
+        //    sf::Vertex(p.position + 10.0f*p.force, sf::Color::Red)
+        //};
         //ioWindow.draw(lineF, 2, sf::Lines);
 
         //Speed debug
@@ -458,13 +516,15 @@ void drawModel(sf::RenderWindow& ioWindow, const sf::RectangleShape& iWorldRect,
         //ioWindow.draw(lines);
 
         //Draw interaction radius
-        sf::CircleShape circle(g_interaction_radius);  // Radius of the circle
-        circle.setFillColor(sf::Color::Transparent);  // Set the fill color to transparent
-        circle.setOutlineThickness(0.1f);  // Set the outline thickness
-        circle.setOutlineColor(sf::Color::Green);  // Set the outline color to green
-        circle.setOrigin(g_interaction_radius, g_interaction_radius);
-        circle.setPosition(p.position);
-        ioWindow.draw(circle);
+        if (p.type == ParticleType::S) {
+            sf::CircleShape circle(g_interaction_radius);  // Radius of the circle
+            circle.setFillColor(sf::Color::Transparent);  // Set the fill color to transparent
+            circle.setOutlineThickness(0.1f);  // Set the outline thickness
+            circle.setOutlineColor(sf::Color::Green);  // Set the outline color to green
+            circle.setOrigin(g_interaction_radius, g_interaction_radius);
+            circle.setPosition(p.position);
+            ioWindow.draw(circle);
+        }
     }
     ioWindow.draw(iWorldRect);
 }
@@ -532,7 +592,13 @@ int main()
                 if (event.key.code == sf::Keyboard::C)
                     g_centerize = !g_centerize;
                 if (event.key.code == sf::Keyboard::S)
-                    myModel.spawn();
+                    myModel.spawn(ParticleType::S);
+                if (event.key.code == sf::Keyboard::F)
+                    myModel.spawn(ParticleType::F);
+                if (event.key.code == sf::Keyboard::A)
+                    myModel.spawn(ParticleType::A);
+                if (event.key.code == sf::Keyboard::B)
+                    myModel.spawn(ParticleType::B);
                 break;
             }
         }
@@ -549,6 +615,7 @@ int main()
         }
         ImGui::SliderFloat("dt", &g_dt, 0.0f, 1.0f);
         ImGui::SliderFloat("Containing force", &g_containing_force, 0.0f, 2.0f);
+        ImGui::SliderFloat("Centerize", &g_center_force, 0.0f, 0.001f);
         ImGui::SliderFloat("Brownian speed", &g_temp_speed, 0.0f, 10.0f);
         ImGui::SliderFloat("Void viscosity", &g_void_viscosity, 0.99f, 1.0f);
         ImGui::SliderFloat("S interaction radius", &g_interaction_radius, 4.0f, 20.0f);
@@ -559,7 +626,7 @@ int main()
         ImGui::SliderFloat("S force viscosity", &g_s_f_viscosity, 0.0, 4.0f);
         ImGui::SliderFloat("S torque viscosity", &g_s_t_viscosity, 0.0, 4.0f);
         ImGui::SliderFloat("S opposition threshold", &g_opposition_threshold, 0.0, 7.0f);
-        ImGui::Text("S key to spawn");
+        ImGui::Text("S,F,A,B key to spawn particles");
         ImGui::Text("C key to center");
         ImGui::End();
 
