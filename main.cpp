@@ -22,9 +22,11 @@ static int K_NB_TYPE = 16;
 static sf::Vector2f DOT_OFSET = sf::Vector2f(DOT_SIZE, DOT_SIZE);
 
 static bool g_centerize = false;
+static bool g_draw_s_interaction_radius = true;
+static bool g_destroy_at_boundary = false;
 static float g_persistence = 0.5;
 static float s_fps = 0;
-static float g_interaction_radius = 8.0f;//10.0f;
+static float g_interaction_radius = 13.0f;//10.0f;
 static float g_temp_speed = 0.0f;
 static float g_dt = 0.1f;
 static int g_ksteps_per_frame = 10;
@@ -36,7 +38,7 @@ static float g_s_t_strength = 1.0f;
 static float g_s_f_exp_power = 3.0f;
 static float g_s_f_viscosity = 0.8f;
 static float g_s_t_viscosity = 0.0;
-static float g_opposition_threshold = 0.1;
+static float g_opposition_threshold = 1.2;
 static float g_center_force = 0.0001f;
 
 enum ParticleType {
@@ -403,7 +405,7 @@ struct Model {
                 }
             }*/
 
-            if (p.type == ParticleType::S) {
+            if (p.type == ParticleType::S || g_destroy_at_boundary) {
                 // Containing delete
                 if ((p.position.x > WORLD_WIDTH/2) || (p.position.x < -WORLD_WIDTH/2) || (p.position.y > WORLD_HEIGTH/2) || (p.position.y < -WORLD_HEIGTH/2)) {
                     itp = particles.erase(itp);
@@ -451,7 +453,7 @@ struct Model {
             p.angularVelocity = p.angularVelocity + angularAcceleration * g_dt;
 
             // Cap velocity
-            float maxVelocity = 10.0;
+            float maxVelocity = 2.0;
             if (norm(p.velocity) > maxVelocity) {
                 normalize(p.velocity);
                 p.velocity *= maxVelocity;
@@ -501,7 +503,7 @@ void drawModel(sf::RenderWindow& ioWindow, const sf::RectangleShape& iWorldRect,
             sf::Vertex line[] =
             {
                 sf::Vertex(p.position, sf::Color::White),
-                sf::Vertex(p.position + tailLength*unitVectorFromAngle(p.orientation+M_PI/2.0), sf::Color::White)
+                sf::Vertex(p.position + tailLength*unitVectorFromAngle(p.orientation+M_PI), sf::Color::White)
             };
             ioWindow.draw(line, 2, sf::Lines);
         }
@@ -537,11 +539,11 @@ void drawModel(sf::RenderWindow& ioWindow, const sf::RectangleShape& iWorldRect,
             float alpha = 1.0f*(iModel._step-p.spawnStep)/(g_persistence*s_fps*g_ksteps_per_frame);
             if (alpha < 0.25) {alpha = 4*alpha;}
             else if (alpha > 0.25) {alpha = 1.0-(alpha-0.25)/0.75;}
-            sf::CircleShape circle(4*DOT_SIZE);  // Radius of the circle
+            sf::CircleShape circle(3*DOT_SIZE);  // Radius of the circle
             sf::Color color = p.shape.getFillColor();  // Get the current color
             color.a = alpha * 255;  // Set the alpha component
             circle.setFillColor(color);  // Set the color with the new alpha
-            circle.setOrigin(4*DOT_SIZE, 4*DOT_SIZE);
+            circle.setOrigin(3*DOT_SIZE, 3*DOT_SIZE);
             circle.setPosition(p.position);
             ioWindow.draw(circle);
         }
@@ -550,7 +552,7 @@ void drawModel(sf::RenderWindow& ioWindow, const sf::RectangleShape& iWorldRect,
         //ioWindow.draw(lines);
 
         //Draw interaction radius
-        if (p.type == ParticleType::S) {
+        if (p.type == ParticleType::S && g_draw_s_interaction_radius) {
             sf::CircleShape circle(g_interaction_radius);  // Radius of the circle
             circle.setFillColor(sf::Color::Transparent);  // Set the fill color to transparent
             circle.setOutlineThickness(0.1f);  // Set the outline thickness
@@ -663,6 +665,8 @@ int main()
         ImGui::SliderFloat("S force viscosity", &g_s_f_viscosity, 0.0, 4.0f);
         ImGui::SliderFloat("S torque viscosity", &g_s_t_viscosity, 0.0, 4.0f);
         ImGui::SliderFloat("S opposition threshold", &g_opposition_threshold, 0.0, 7.0f);
+        ImGui::Checkbox("Destroy at boundary", &g_destroy_at_boundary);
+        ImGui::Checkbox("Draw S Interaction Radius", &g_draw_s_interaction_radius);
         ImGui::Text("S,F,A,B key to spawn particles");
         ImGui::Text("C key to center");
         ImGui::Text("R key to reset");
