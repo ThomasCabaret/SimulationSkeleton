@@ -22,6 +22,8 @@ static int K_NB_TYPE = 16;
 static sf::Vector2f DOT_OFSET = sf::Vector2f(DOT_SIZE, DOT_SIZE);
 
 static bool g_centerize = false;
+static float g_persistence = 0.5;
+static float s_fps = 0;
 static float g_interaction_radius = 8.0f;//10.0f;
 static float g_temp_speed = 0.0f;
 static float g_dt = 0.1f;
@@ -54,6 +56,7 @@ struct Particle {
     sf::Vector2f force;
     float torque;
     ParticleType type;
+    int spawnStep;
     //bool isLeft;
     //std::vector<Particle*> linked;
     //Having view relating object in the model object is not ideal
@@ -196,6 +199,7 @@ struct Model {
     std::list<Particle> particles; //BAD choice of container if dynamic
     std::random_device rd;
     std::mt19937 gen;
+    int _step;
 
     Model() : gen(rd())
     {
@@ -204,14 +208,15 @@ struct Model {
 
     void init()
     {
+        _step = 0;
         // Initialize particles
         particles.clear();
         for (int i = 0; i < K_INIT_PARTICLES; ++i) {
-            spawn(ParticleType::A);
+            spawn(ParticleType::A, 0);
         }
     }
 
-    void spawn(const ParticleType& iParticleType)
+    void spawn(const ParticleType& iParticleType, int iSpawnStep)
     {
         std::uniform_int_distribution<> disType(0, K_NB_TYPE-1);
         std::uniform_real_distribution<> disX(-WORLD_WIDTH/32, WORLD_WIDTH/32);
@@ -228,6 +233,7 @@ struct Model {
         p.shape = sf::CircleShape(DOT_SIZE);
         p.shape.setOrigin(DOT_SIZE, DOT_SIZE);
         p.shape.setPosition(p.position);
+        p.spawnStep = iSpawnStep;
         particles.push_back(p);
     }
 
@@ -313,6 +319,7 @@ struct Model {
     //////////////////////////////////////////////////////////////////////////////
     void step()
     {
+        ++_step;
         // Calculate the force and torque on particle p due to all other particles
         for (auto itp = particles.begin(); itp != particles.end();) {
             auto& p = *itp;
@@ -363,8 +370,8 @@ struct Model {
                         //Chemical force 1: F makes B when catalysed by A
                         if (rNorm < g_interaction_radius/2.0) {
                             //Maybe TODO a commit mecahnism
-                            if (p.type == ParticleType::F) p.type = ParticleType::B;
-                            if (other.type == ParticleType::F) other.type = ParticleType::B;
+                            if (p.type == ParticleType::F) {p.type = ParticleType::B; p.spawnStep = _step;}
+                            if (other.type == ParticleType::F) {other.type = ParticleType::B; other.spawnStep = _step;}
                         }
                     } else if ((p.type == ParticleType::B && other.type == ParticleType::F) ||
                                (other.type == ParticleType::B && p.type == ParticleType::F))
@@ -373,6 +380,8 @@ struct Model {
                         if (rNorm < g_interaction_radius/2.0) {
                             p.type = ParticleType::A;
                             other.type = ParticleType::S;
+                            p.spawnStep = _step;
+                            other.spawnStep = _step;
                         }
                     }
                 }
@@ -492,7 +501,7 @@ void drawModel(sf::RenderWindow& ioWindow, const sf::RectangleShape& iWorldRect,
             sf::Vertex line[] =
             {
                 sf::Vertex(p.position, sf::Color::White),
-                sf::Vertex(p.position + tailLength*unitVectorFromAngle(p.orientation), sf::Color::White)
+                sf::Vertex(p.position + tailLength*unitVectorFromAngle(p.orientation+M_PI/2.0), sf::Color::White)
             };
             ioWindow.draw(line, 2, sf::Lines);
         }
@@ -522,6 +531,20 @@ void drawModel(sf::RenderWindow& ioWindow, const sf::RectangleShape& iWorldRect,
         //};
         //ioWindow.draw(lineV, 2, sf::Lines);
 
+
+        if (iModel._step > p.spawnStep && iModel._step < p.spawnStep+g_persistence*s_fps*g_ksteps_per_frame)
+        {
+            float alpha = 1.0f*(iModel._step-p.spawnStep)/(g_persistence*s_fps*g_ksteps_per_frame);
+            if (alpha < 0.25) {alpha = 4*alpha;}
+            else if (alpha > 0.25) {alpha = 1.0-(alpha-0.25)/0.75;}
+            sf::CircleShape circle(4*DOT_SIZE);  // Radius of the circle
+            sf::Color color = p.shape.getFillColor();  // Get the current color
+            color.a = alpha * 255;  // Set the alpha component
+            circle.setFillColor(color);  // Set the color with the new alpha
+            circle.setOrigin(4*DOT_SIZE, 4*DOT_SIZE);
+            circle.setPosition(p.position);
+            ioWindow.draw(circle);
+        }
         ioWindow.draw(p.shape);
         //ioWindow.draw(lineF, 2, sf::Lines);
         //ioWindow.draw(lines);
@@ -605,13 +628,13 @@ int main()
                 if (event.key.code == sf::Keyboard::C)
                     g_centerize = !g_centerize;
                 if (event.key.code == sf::Keyboard::S)
-                    myModel.spawn(ParticleType::S);
+                    myModel.spawn(ParticleType::S, myModel._step);
                 if (event.key.code == sf::Keyboard::F)
-                    myModel.spawn(ParticleType::F);
+                    myModel.spawn(ParticleType::F, myModel._step);
                 if (event.key.code == sf::Keyboard::A)
-                    myModel.spawn(ParticleType::A);
+                    myModel.spawn(ParticleType::A, myModel._step);
                 if (event.key.code == sf::Keyboard::B)
-                    myModel.spawn(ParticleType::B);
+                    myModel.spawn(ParticleType::B, myModel._step);
                 break;
             }
         }
@@ -619,8 +642,8 @@ int main()
 
         //GUI
         ImGui::Begin("Demo window");
-        float fps = 1.0f / ImGui::GetIO().DeltaTime;
-        ImGui::Text("FPS: %.1f", fps);
+        s_fps = 1.0f / ImGui::GetIO().DeltaTime;
+        ImGui::Text("FPS: %.1f", s_fps);
         ImGui::Text("Population: %d", myModel.particles.size());
         if (ImGui::InputInt("Steps per frame", &g_ksteps_per_frame)) {
             if (g_ksteps_per_frame < 1) {
