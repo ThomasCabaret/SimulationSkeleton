@@ -31,6 +31,7 @@ static float g_temp_speed = 0.0f;
 static float g_dt = 0.1f;
 static int g_ksteps_per_frame = 10;
 static float g_void_viscosity = 0.999;
+static float g_void_torque_viscosity = 0.99;
 static float g_containing_force = 1.0;
 static float g_div_angle = 0.3;
 static float g_s_f_strength = 1.0f;
@@ -38,7 +39,7 @@ static float g_s_t_strength = 1.0f;
 static float g_s_f_exp_power = 3.0f;
 static float g_s_f_viscosity = 0.8f;
 static float g_s_t_viscosity = 0.0;
-static float g_opposition_threshold = 1.2;
+static float g_opposition_threshold = 1.3;
 static float g_center_force = 0.0001f;
 
 enum ParticleType {
@@ -405,7 +406,7 @@ struct Model {
                 }
             }*/
 
-            if (p.type == ParticleType::S || g_destroy_at_boundary) {
+            if (g_destroy_at_boundary) { //p.type == ParticleType::S ||
                 // Containing delete
                 if ((p.position.x > WORLD_WIDTH/2) || (p.position.x < -WORLD_WIDTH/2) || (p.position.y > WORLD_HEIGTH/2) || (p.position.y < -WORLD_HEIGTH/2)) {
                     itp = particles.erase(itp);
@@ -471,7 +472,7 @@ struct Model {
 
             //Sticky dissipative space and other limits
             p.velocity = g_void_viscosity * p.velocity;
-            p.angularVelocity *= 0.99f;
+            p.angularVelocity *= g_void_torque_viscosity;
 
             // Update
             p.position = p.position + p.velocity * g_dt;
@@ -655,8 +656,9 @@ int main()
         ImGui::SliderFloat("dt", &g_dt, 0.0f, 1.0f);
         ImGui::SliderFloat("Containing force", &g_containing_force, 0.0f, 2.0f);
         ImGui::SliderFloat("Centerize", &g_center_force, 0.0f, 0.001f);
-        ImGui::SliderFloat("Brownian speed", &g_temp_speed, 0.0f, 10.0f);
+        ImGui::SliderFloat("Brownian speed", &g_temp_speed, 0.0f, 1.0f);
         ImGui::SliderFloat("Void viscosity", &g_void_viscosity, 0.99f, 1.0f);
+        ImGui::SliderFloat("Void torque viscosity", &g_void_torque_viscosity, 0.9f, 1.0f);
         ImGui::SliderFloat("S interaction radius", &g_interaction_radius, 4.0f, 20.0f);
         ImGui::SliderFloat("S force strength", &g_s_f_strength, 0.0f, 5.0f);
         ImGui::SliderFloat("S force exp power", &g_s_f_exp_power, 1.0f, 5.0f);
