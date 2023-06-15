@@ -272,10 +272,11 @@ struct Model {
         //f(teta, phi) = f(-teta, phi-teta+pi) //action reaction symmetry)
         //f(teta, phi) = f(-teta, -phi) //mirror symmetry
         float anisoFactor = 1.0f;//sin(teta)*sin(phi)+sin(teta)*sin(phi-teta) + 1.6f;
-        if (opposition < g_opposition_threshold-0.1) {
+        float g_opposition_threshold_sp = 0.1;
+        if (opposition < g_opposition_threshold-g_opposition_threshold_sp) {
             anisoFactor = -1.0f;
-        } else if (opposition < g_opposition_threshold+0.1) {
-            anisoFactor = (opposition - (g_opposition_threshold-0.1)/(2*0.1))*2.0-1.0; //supposed to be in -1.0 1.0
+        } else if (opposition < g_opposition_threshold+g_opposition_threshold_sp) {
+            anisoFactor = ((opposition - (g_opposition_threshold-g_opposition_threshold_sp))/(2*g_opposition_threshold_sp))*2.0-1.0; //supposed to be in -1.0 1.0
         }
         //if (((2*phi-teta+M_PI)*(2*phi-teta+M_PI)+teta*teta) < 2.0*g_div_angle*g_div_angle) anisoFactor = -1.0f;
         //2*phi-teta is an invariant angle in an interacting pair
