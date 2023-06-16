@@ -24,6 +24,8 @@ static sf::Vector2f DOT_OFSET = sf::Vector2f(DOT_SIZE, DOT_SIZE);
 static bool g_centerize = false;
 static bool g_draw_s_interaction_radius = true;
 static bool g_destroy_at_boundary = false;
+static bool g_source = false;
+static sf::Vector2f g_source_pos = sf::Vector2f(0, 0);
 static float g_persistence = 0.5;
 static float s_fps = 0;
 static float g_interaction_radius = 13.0f;//10.0f;
@@ -215,11 +217,11 @@ struct Model {
         // Initialize particles
         particles.clear();
         for (int i = 0; i < K_INIT_PARTICLES; ++i) {
-            spawn(ParticleType::A, 0);
+            spawn(ParticleType::A, sf::Vector2f(0, 0), 0);
         }
     }
 
-    void spawn(const ParticleType& iParticleType, int iSpawnStep)
+    void spawn(const ParticleType& iParticleType, sf::Vector2f iOrigin, int iSpawnStep)
     {
         std::uniform_int_distribution<> disType(0, K_NB_TYPE-1);
         std::uniform_real_distribution<> disX(-WORLD_WIDTH/32, WORLD_WIDTH/32);
@@ -229,6 +231,7 @@ struct Model {
 
         Particle p;
         p.position = sf::Vector2f(disX(gen), disY(gen));
+        p.position += iOrigin;
         p.velocity = sf::Vector2f(disV(gen), disV(gen));
         p.orientation = disA(gen);
         p.angularVelocity = 0.0;
@@ -585,6 +588,7 @@ int main()
     // Variables to store the state of mouse dragging
     bool isDragging = false;
     sf::Vector2f lastMousePos;
+    sf::Vector2i mouseDownPxPos;
 
     // Create a sf::RectangleShape with the given world size
     sf::RectangleShape worldRect(sf::Vector2f(WORLD_WIDTH, WORLD_HEIGTH));
@@ -618,13 +622,25 @@ int main()
                 if (!ImGui::GetIO().WantCaptureMouse) {
                     if (event.mouseButton.button == sf::Mouse::Left) {
                         isDragging = true;
-                        lastMousePos = window.mapPixelToCoords(sf::Mouse::getPosition(window));
+                        mouseDownPxPos = sf::Mouse::getPosition(window);
+                        lastMousePos = window.mapPixelToCoords(mouseDownPxPos);
                     }
                     break;
                 }
             case sf::Event::MouseButtonReleased:
                 if (event.mouseButton.button == sf::Mouse::Left)
+                {
+                    if (!ImGui::GetIO().WantCaptureMouse) {
+                        const sf::Vector2i mouseUpPxPos = sf::Mouse::getPosition(window);
+                        const sf::Vector2i delta = mouseDownPxPos - mouseUpPxPos;
+                        int CLICK_THRESHOLD = 2;
+                        if (abs(mouseDownPxPos.x - mouseUpPxPos.x) < CLICK_THRESHOLD && abs(mouseDownPxPos.y - mouseUpPxPos.y) < CLICK_THRESHOLD) {
+                            g_source = !g_source;
+                            g_source_pos = window.mapPixelToCoords(mouseUpPxPos);
+                        }
+                    }
                     isDragging = false;
+                }
                 break;
             case sf::Event::KeyPressed:
                 if (event.key.code == sf::Keyboard::R)
@@ -632,13 +648,13 @@ int main()
                 if (event.key.code == sf::Keyboard::C)
                     g_centerize = !g_centerize;
                 if (event.key.code == sf::Keyboard::S)
-                    myModel.spawn(ParticleType::S, myModel._step);
+                    myModel.spawn(ParticleType::S, sf::Vector2f(0, 0), myModel._step);
                 if (event.key.code == sf::Keyboard::F)
-                    myModel.spawn(ParticleType::F, myModel._step);
+                    myModel.spawn(ParticleType::F, sf::Vector2f(0, 0), myModel._step);
                 if (event.key.code == sf::Keyboard::A)
-                    myModel.spawn(ParticleType::A, myModel._step);
+                    myModel.spawn(ParticleType::A, sf::Vector2f(0, 0), myModel._step);
                 if (event.key.code == sf::Keyboard::B)
-                    myModel.spawn(ParticleType::B, myModel._step);
+                    myModel.spawn(ParticleType::B, sf::Vector2f(0, 0), myModel._step);
                 break;
             }
         }
@@ -688,6 +704,12 @@ int main()
 
         // Update the last mouse position
         lastMousePos = window.mapPixelToCoords(sf::Mouse::getPosition(window));
+
+        // Spawning
+        if (g_source)
+        {
+            myModel.spawn(ParticleType::F, g_source_pos, myModel._step);
+        }
 
         // Model update
         for (int i=0; i<g_ksteps_per_frame; ++i)
