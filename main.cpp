@@ -49,7 +49,8 @@ enum ParticleType {
     F,
     A,
     B,
-    S
+    S,
+    L
 };
 
 // Simple struct to hold particle data
@@ -196,6 +197,8 @@ sf::Color getColor(const ParticleType& iParticleType) {
         return sf::Color::Magenta;
     case S:
         return sf::Color(255, 200, 0); // RGB values for yolk
+    case L:
+        return sf::Color(27, 227, 243); // RGB values for clear blue
     default:
         return sf::Color::White; // Return black if none of the above
     }
@@ -361,8 +364,8 @@ struct Model {
                                 p.force += -r * factor;
                            }
                         }
-                    } else if ((p.type == ParticleType::S && (other.type == ParticleType::A || other.type == ParticleType::B)) ||
-                              (other.type == ParticleType::S && (p.type == ParticleType::A || p.type == ParticleType::B)))
+                    } else if ((p.type == ParticleType::S && (other.type == ParticleType::A || other.type == ParticleType::B || other.type == ParticleType::L)) ||
+                              (other.type == ParticleType::S && (p.type == ParticleType::A || p.type == ParticleType::B || p.type == ParticleType::L)))
                     {
                         // Surfactant molecules S walling model
                         if (rNorm < g_interaction_radius) {
@@ -388,6 +391,16 @@ struct Model {
                         if (rNorm < g_interaction_radius/2.0) {
                             p.type = ParticleType::A;
                             other.type = ParticleType::S;
+                            p.spawnStep = _step;
+                            other.spawnStep = _step;
+                        }
+                    }  else if ((p.type == ParticleType::L && other.type == ParticleType::A) ||
+                               (other.type == ParticleType::A && p.type == ParticleType::L))
+                    {
+                        //Chemical force 3: R + A makes R + F // Test reaction limitor
+                        if (rNorm < g_interaction_radius/2.0) {
+                            p.type = ParticleType::F;
+                            other.type = ParticleType::L;
                             p.spawnStep = _step;
                             other.spawnStep = _step;
                         }
@@ -667,6 +680,8 @@ int main()
                     myModel.spawn(ParticleType::A, mousePxPosForSpawn, myModel._step);
                 if (event.key.code == sf::Keyboard::B)
                     myModel.spawn(ParticleType::B, mousePxPosForSpawn, myModel._step);
+                if (event.key.code == sf::Keyboard::L)
+                    myModel.spawn(ParticleType::L, mousePxPosForSpawn, myModel._step);
                 break;
             }
         }
