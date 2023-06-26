@@ -24,6 +24,7 @@ static sf::Vector2f DOT_OFSET = sf::Vector2f(DOT_SIZE, DOT_SIZE);
 static bool g_centerize = false;
 static bool g_draw_s_interaction_radius = true;
 static bool g_destroy_at_boundary = false;
+static bool g_spawn_at_mouse_location= false;
 static bool g_source = false;
 static sf::Vector2f g_source_pos = sf::Vector2f(0, 0);
 static float g_persistence = 0.5;
@@ -575,7 +576,11 @@ int main()
 {
     // Create the main window
     sf::RenderWindow window(sf::VideoMode(1920, 1080), "Particle system");
-    ImGui::SFML::Init(window);
+    const bool initOK = ImGui::SFML::Init(window);
+    if(!initOK){
+        std::cerr << "Problem" << std::endl;
+        return 1;
+    }
     ImGui::GetStyle().ScaleAllSizes(2.0f);
     ImGui::GetIO().FontGlobalScale = 2.0f;
 
@@ -643,18 +648,25 @@ int main()
                 }
                 break;
             case sf::Event::KeyPressed:
+                sf::Vector2f mousePxPosForSpawn;
+                if(g_spawn_at_mouse_location){
+                    //get current mouse position to spawn particule where mouse is
+                    mousePxPosForSpawn = window.mapPixelToCoords(sf::Mouse::getPosition(window));
+                }else{
+                    mousePxPosForSpawn = sf::Vector2f(0, 0);
+                }
                 if (event.key.code == sf::Keyboard::R)
                     myModel.particles.clear();
                 if (event.key.code == sf::Keyboard::C)
                     g_centerize = !g_centerize;
                 if (event.key.code == sf::Keyboard::S)
-                    myModel.spawn(ParticleType::S, sf::Vector2f(0, 0), myModel._step);
+                    myModel.spawn(ParticleType::S, mousePxPosForSpawn, myModel._step);
                 if (event.key.code == sf::Keyboard::F)
-                    myModel.spawn(ParticleType::F, sf::Vector2f(0, 0), myModel._step);
+                    myModel.spawn(ParticleType::F, mousePxPosForSpawn, myModel._step);
                 if (event.key.code == sf::Keyboard::A)
-                    myModel.spawn(ParticleType::A, sf::Vector2f(0, 0), myModel._step);
+                    myModel.spawn(ParticleType::A, mousePxPosForSpawn, myModel._step);
                 if (event.key.code == sf::Keyboard::B)
-                    myModel.spawn(ParticleType::B, sf::Vector2f(0, 0), myModel._step);
+                    myModel.spawn(ParticleType::B, mousePxPosForSpawn, myModel._step);
                 break;
             }
         }
@@ -686,6 +698,7 @@ int main()
         ImGui::SliderFloat("S opposition threshold", &g_opposition_threshold, 0.0, 7.0f);
         ImGui::Checkbox("Destroy at boundary", &g_destroy_at_boundary);
         ImGui::Checkbox("Draw S Interaction Radius", &g_draw_s_interaction_radius);
+        ImGui::Checkbox("Spawn particules at mouse location", &g_spawn_at_mouse_location);
         ImGui::Text("S,F,A,B key to spawn particles");
         ImGui::Text("C key to center");
         ImGui::Text("R key to reset");
