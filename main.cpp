@@ -22,7 +22,7 @@ static int K_NB_TYPE = 16;
 static sf::Vector2f DOT_OFSET = sf::Vector2f(DOT_SIZE, DOT_SIZE);
 
 static bool g_centerize = false;
-static bool g_draw_s_interaction_radius = true;
+static bool g_draw_s_interaction_radius = false;
 static bool g_destroy_at_boundary = false;
 static bool g_spawn_at_mouse_location= false;
 static bool g_source = false;
@@ -30,19 +30,19 @@ static sf::Vector2f g_source_pos = sf::Vector2f(0, 0);
 static float g_persistence = 0.5;
 static float s_fps = 0;
 static float g_interaction_radius = 13.0f;//10.0f;
-static float g_temp_speed = 0.0f;
+static float g_temp_speed = 0.2f;
 static float g_dt = 0.1f;
 static int g_ksteps_per_frame = 10;
-static float g_void_viscosity = 0.999;
-static float g_void_torque_viscosity = 0.99;
+static float g_void_viscosity = 0.998;
+static float g_void_torque_viscosity = 0.977;
 static float g_containing_force = 1.0;
-static float g_div_angle = 0.3;
-static float g_s_f_strength = 1.0f;
-static float g_s_t_strength = 1.0f;
-static float g_s_f_exp_power = 3.0f;
-static float g_s_f_viscosity = 0.8f;
-static float g_s_t_viscosity = 0.0;
-static float g_opposition_threshold = 1.3;
+static float g_div_angle = 0.377;
+static float g_s_f_strength = 3.21f;
+static float g_s_t_strength = 0.51f;
+static float g_s_f_exp_power = 3.18f;
+static float g_s_f_viscosity = 1.058f;
+static float g_s_t_viscosity = 1.461;
+static float g_opposition_threshold = 1.426;
 static float g_center_force = 0.0001f;
 
 enum ParticleType {
@@ -64,9 +64,8 @@ struct Particle {
     float torque;
     ParticleType type;
     int spawnStep;
-    //bool isLeft;
     //std::vector<Particle*> linked;
-    //Having view relating object in the model object is not ideal
+    //Having view related objects in the model object is not ideal
     //but in SFML not rebuilding the graphical object is significantly faster
     sf::CircleShape shape;
 };
@@ -221,15 +220,16 @@ struct Model {
         // Initialize particles
         particles.clear();
         for (int i = 0; i < K_INIT_PARTICLES; ++i) {
-            spawn(ParticleType::A, sf::Vector2f(0, 0), 0);
+            spawn((ParticleType)(i % 4), sf::Vector2f(0, 0), 0);
         }
     }
 
     void spawn(const ParticleType& iParticleType, sf::Vector2f iOrigin, int iSpawnStep)
     {
+        int spawningFactor = 10;
         std::uniform_int_distribution<> disType(0, K_NB_TYPE-1);
-        std::uniform_real_distribution<> disX(-WORLD_WIDTH/32, WORLD_WIDTH/32);
-        std::uniform_real_distribution<> disY(-WORLD_HEIGTH/32, WORLD_HEIGTH/32);
+        std::uniform_real_distribution<> disX(-WORLD_WIDTH/(2*spawningFactor), WORLD_WIDTH/(2*spawningFactor));
+        std::uniform_real_distribution<> disY(-WORLD_HEIGTH/(2*spawningFactor), WORLD_HEIGTH/(2*spawningFactor));
         std::uniform_real_distribution<> disV(-0.5, 0.5);
         std::uniform_real_distribution<> disA(0, 2.0*M_PI);
 
