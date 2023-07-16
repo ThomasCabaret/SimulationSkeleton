@@ -1,4 +1,7 @@
 # Particle-Life
+- This is a ready code blocks project
+- https://www.codeblocks.org/
+
 
 At any time, in case of need, the R key removes every particles
 
@@ -19,5 +22,3 @@ Do not forget to disable centerize after, with C key (it's only an help to build
 If the source looks like a beam it means you forgot to disable centerize with the C key.
 (Clicking again stops the green particles production in case of need)
 * The vesicle will hopefully feed, grow, and reproduce.
-
-
