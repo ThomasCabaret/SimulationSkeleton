@@ -1,4 +1,5 @@
-# Particle-Life
+# Simulator of a minimalistic "emergence of life" event
+- The simulated world exhibits spontaneous formation of self reproducting structures.
 - This is a ready code blocks project
 - https://www.codeblocks.org/
 
