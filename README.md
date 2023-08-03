@@ -32,3 +32,25 @@ After that the steps could be:
 * Set up an end to end simulation of vesicle formation and their duplication. In this demonstration there are 2 distincts experiments essentially because vesicles need precursor to reproduce but free catalysts consume precursor and free catalysts are required for vesicule formation. In a nutshell different environnements, or change in environment over time is required. This can be integrated by crafting different areas in the simulated world as well as cyclic change like periodic flow mimicing sea current or tides. The aim is to have vesicle production at some location and some date in the simulation, and reproduction of them at another location later, without human intervention in between. Addition of new chemicals and new reactions might be necessary to mitigate the action of free catalysts in some areas.
 * Add new chemicals and new reactions openning on some fitness improvment to see a phase of evolution after the initial viable replicators emergence.
 * Add parametrized chemicals and a more multifunction physics of those polymer (kind of similar to protein job in the real world) to transition towards more open darwinian evolution. See what this "parametrized" concept is about here: https://docs.google.com/document/d/1i6MqmgbaOxabFZPrLGpODqssTl1e5lWWDPObg_nZyQo/edit?usp=sharing
+
+
+# How to build the sources
+The build process is mostly automated using the cross-platform CMake build system and the vcpkg package manager, which is included as a Git submodule.
+
+### Getting the sources
+To obtain the sources, please open a command prompt in a suitable directory (which should not contain whitespace characters) and enter the following command:
+```
+git clone --recursive https://github.com/chrxh/alien.git
+```
+Note: The `--recursive` parameter is necessary to check out the vcpkg submodule as well. Besides that, submodules are not normally updated by the standard `git pull` command. Instead, you need to write `git pull --recurse-submodules`.
+
+### Build instructions
+Prerequisites: [CMake](https://cmake.org/download/) >= 3.24 and a toolchain for CMake (e.g. GCC 9.x+ or [MSVC v142+](https://visualstudio.microsoft.com/free-developer-offers/)).
+
+Build steps:
+```
+mkdir build && cd build
+cmake .. -DCMAKE_BUILD_TYPE=Release
+cmake --build . --config Release -j8
+```
+If everything goes well, the ParticleLife executable can be found under the build directory in `./ParticleLife` or `.\Release\ParticleLife.exe` depending on the used toolchain and platform.
