@@ -7,7 +7,7 @@ set(CMAKE_TOOLCHAIN_FILE "${CMAKE_CURRENT_SOURCE_DIR}/external/vcpkg/scripts/bui
 
 project(SimulationSkeleton LANGUAGES CXX)
 
-set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD 14)
 
 # Default to Debug
 if(NOT CMAKE_BUILD_TYPE)
