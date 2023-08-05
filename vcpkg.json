@@ -12,7 +12,7 @@
         },
         {
             "name": "imgui-sfml",
-            "version>=": "2.5#3"
+            "version>=": "2.5#4"
         }
     ],
     "builtin-baseline": "9d47b24eacbd1cd94f139457ef6cd35e5d92cc84",
