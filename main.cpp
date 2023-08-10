@@ -256,11 +256,11 @@ struct Plug
         int ny = g_interaction_radius/PLUG_DY+1;
         sf::Vector2i ij = locate(part.position);
         sf::Vector2i ijc = ij-sf::Vector2i{ nx,ny };
-        for(; ijc.x < ij.x+nx; ++ijc.x)
+        for(; ijc.x <= ij.x+nx; ++ijc.x)
         {
             if(ijc.x < 0 || ijc.x >= PLUG_NX)
                 continue;
-            for(; ijc.y < ij.y+ny; ++ijc.y)
+            for(; ijc.y <= ij.y+ny; ++ijc.y)
             {
                 if(ijc.y < 0 || ijc.y >= PLUG_NY)
                     continue;
@@ -777,7 +777,11 @@ int main()
                     mousePxPosForSpawn = sf::Vector2f(0, 0);
                 }
                 if (event.key.code == sf::Keyboard::R)
+                {
+                    for(Particle& p : myModel.particles)
+                        myModel.plug.removeParticle(p);
                     myModel.particles.clear();
+                }
                 if (event.key.code == sf::Keyboard::C)
                     g_centerize = !g_centerize;
                 if (event.key.code == sf::Keyboard::S)
