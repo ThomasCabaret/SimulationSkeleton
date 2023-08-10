@@ -45,6 +45,15 @@ static float g_s_t_viscosity = 1.461;
 static float g_opposition_threshold = 1.426;
 static float g_center_force = 0.0001f;
 
+static int PLUG_NX = 50;
+static int PLUG_NY = 50;
+static float PLUG_DX = (1.*WORLD_WIDTH)/PLUG_NX;
+static float PLUG_DY = (1.*WORLD_HEIGTH)/PLUG_NY;
+
+struct Particle;
+using Cell = std::list<Particle*>;
+using Grid = std::vector<Cell>;
+
 enum ParticleType {
     F,
     A,
@@ -68,6 +77,7 @@ struct Particle {
     //Having view related objects in the model object is not ideal
     //but in SFML not rebuilding the graphical object is significantly faster
     sf::CircleShape shape;
+    Cell* cell;
 };
 
 //////////////////////////////////////////////////////////////////////////////
@@ -203,19 +213,98 @@ sf::Color getColor(const ParticleType& iParticleType) {
     }
 }
 
+
+//////////////////////////////////////////////////////////////////////////////
+struct Plug
+{
+    Grid grid;
+
+    Plug() {
+        grid.resize(PLUG_NX*PLUG_NY);
+    };
+
+    int ij2k(const sf::Vector2i& ij) const{
+        return PLUG_NX*ij.y+ij.x;
+    }
+    sf::Vector2i k2ij(int k) const {
+        int i = k % PLUG_NX;
+        int j = (k-i)/PLUG_NX;
+        return sf::Vector2i{ i,j };
+    }
+
+    sf::Vector2i locate(const sf::Vector2f& pos) const {
+        sf::Vector2i ij;
+        ij.x = floor((pos.x+.5*WORLD_WIDTH)/PLUG_DX);
+        ij.y = floor((pos.y+.5*WORLD_HEIGTH)/PLUG_DY);
+        if(pos.x+.5*WORLD_WIDTH < 0.)
+            ij.x = 0;
+        if(pos.y+.5*WORLD_HEIGTH < 0.)
+            ij.y = 0;
+        if(pos.x+.5*WORLD_WIDTH > WORLD_WIDTH)
+            ij.x = PLUG_NX-1;
+        if(pos.y+.5*WORLD_HEIGTH > WORLD_HEIGTH)
+            ij.y = PLUG_NY-1;
+        return ij;
+    }
+    Cell* getCell(const Particle& part) {
+        const sf::Vector2f& pos = part.position;
+        int k = ij2k(locate(pos));
+        return &grid[k];
+    }
+    std::list<Cell*>& getNeghbourCells(const Particle& part, std::list<Cell*>& neighbour) {
+        int nx = g_interaction_radius/PLUG_DX+1;
+        int ny = g_interaction_radius/PLUG_DY+1;
+        sf::Vector2i ij = locate(part.position);
+        sf::Vector2i ijc = ij-sf::Vector2i{ nx,ny };
+        for(; ijc.x < ij.x+nx; ++ijc.x)
+        {
+            if(ijc.x < 0 || ijc.x >= PLUG_NX)
+                continue;
+            for(; ijc.y < ij.y+ny; ++ijc.y)
+            {
+                if(ijc.y < 0 || ijc.y >= PLUG_NY)
+                    continue;
+                int k = ij2k(ijc);
+                neighbour.push_back(&grid[k]);
+            }
+            ijc.y = ij.y-ny;
+        }
+        return neighbour;
+    }
+    void addParticle(Particle& part) {
+        Cell* cell = getCell(part);
+        cell->push_back(&part);
+        part.cell = cell;
+    }
+    void removeParticle(const Particle& part) {
+        Cell* cell = part.cell;
+        auto it = std::find(cell->begin(),cell->end(),&part);
+        cell->erase(it);
+    }
+    void updateCell(Particle& part) {
+        const sf::Vector2f& pos = part.position;
+        int k = ij2k(locate(pos));
+        if(&grid[k] != part.cell)
+        {
+            removeParticle(part);
+            addParticle(part);
+        }
+    }
+};
+//////////////////////////////////////////////////////////////////////////////
+
 struct Model {
     std::list<Particle> particles; //BAD choice of container if dynamic
     std::random_device rd;
     std::mt19937 gen;
     int _step;
+    Plug plug;
 
-    Model() : gen(rd())
-    {
+    Model() : gen(rd()){
         init();
     }
 
-    void init()
-    {
+    void init() {
         _step = 0;
         // Initialize particles
         particles.clear();
@@ -224,8 +313,7 @@ struct Model {
         }
     }
 
-    void spawn(const ParticleType& iParticleType, sf::Vector2f iOrigin, int iSpawnStep)
-    {
+    void spawn(const ParticleType& iParticleType, sf::Vector2f iOrigin, int iSpawnStep) {
         int spawningFactor = 10;
         std::uniform_int_distribution<> disType(0, K_NB_TYPE-1);
         std::uniform_real_distribution<> disX(-WORLD_WIDTH/(2*spawningFactor), WORLD_WIDTH/(2*spawningFactor));
@@ -245,6 +333,7 @@ struct Model {
         p.shape.setPosition(p.position);
         p.spawnStep = iSpawnStep;
         particles.push_back(p);
+        plug.addParticle(particles.back());
     }
 
     //////////////////////////////////////////////////////////////////////////////
@@ -253,8 +342,7 @@ struct Model {
                                         const sf::Vector2f& r,
                                         float rNorm,
                                         sf::Vector2f& oForce,
-                                        float& oTorque)
-    {
+                                        float& oTorque) {
         const sf::Vector2f& pos1 = p.position;
         const sf::Vector2f& pos2 = other.position;
         float orientation1 = p.orientation;
@@ -328,8 +416,7 @@ struct Model {
     }
 
     //////////////////////////////////////////////////////////////////////////////
-    void step()
-    {
+    void step() {
         ++_step;
         // Calculate the force and torque on particle p due to all other particles
         for (auto itp = particles.begin(); itp != particles.end();) {
@@ -338,71 +425,89 @@ struct Model {
             p.torque = 0.0;
 
             //General forces with any other particles
-            for (Particle& other : particles) {
-                if (&other != &p) {  // Avoid self-interaction
-                    sf::Vector2f r = other.position - p.position;
-                    float rNorm = norm(r);
-                    sf::Vector2f force(0.0, 0.0);
-                    float torque = 0.0;
-                    // Surfactant molecules S interaction model
-                    if (p.type == ParticleType::S && other.type == ParticleType::S)
-                    {
-                        if (rNorm < g_interaction_radius) {  // Consider only particles within the interaction radius
-                            // Calculate force and torque using appropriate model
-                            //Force model for vesicle formation
-                            calculateForceAndTorque_polar1(p, other,
-                                                           r, rNorm,
-                                                           force, torque);
+            std::list<Cell*> neighbour{};
+            plug.getNeghbourCells(p,neighbour);
+            for(Cell* cell: neighbour)
+            {
+                for (Particle* pother : *cell)
+                {
+                    Particle& other = *pother;
+                    // for(Particle& other : particles)
+                    // {
+                    if (&other != &p)
+                    {  // Avoid self-interaction
+                        sf::Vector2f r = other.position - p.position;
+                        float rNorm = norm(r);
+                        sf::Vector2f force(0.0, 0.0);
+                        float torque = 0.0;
+                        // Surfactant molecules S interaction model
+                        if (p.type == ParticleType::S && other.type == ParticleType::S)
+                        {
+                            if (rNorm < g_interaction_radius) {  // Consider only particles within the interaction radius
+                                // Calculate force and torque using appropriate model
+                                //Force model for vesicle formation
+                                calculateForceAndTorque_polar1(p, other,
+                                                               r, rNorm,
+                                                               force, torque);
 
-                            p.force += force;
-                            p.torque += torque;
+                                p.force += force;
+                                p.torque += torque;
 
-                           //Solid repulsion
-                           if (rNorm < 2.0*2.0*DOT_SIZE) //The first 2 is for progressive smoothing
-                           {
-                               float factor = std::pow(2.0*DOT_SIZE/rNorm, 9);
-                                p.force += -r * factor;
-                           }
+                                //Solid repulsion
+                                if (rNorm < 2.0*2.0*DOT_SIZE) //The first 2 is for progressive smoothing
+                                {
+                                    float factor = std::pow(2.0*DOT_SIZE/rNorm, 9);
+                                    p.force += -r * factor;
+                                }
+                            }
                         }
-                    } else if ((p.type == ParticleType::S && (other.type == ParticleType::A || other.type == ParticleType::B || other.type == ParticleType::L)) ||
-                              (other.type == ParticleType::S && (p.type == ParticleType::A || p.type == ParticleType::B || p.type == ParticleType::L)))
-                    {
-                        // Surfactant molecules S walling model
-                        if (rNorm < g_interaction_radius) {
-                            // Negative for repulsion
-                            //calculateForce_quadraticAttraction(-0.001, r, rNorm, force);
-                            float factor = std::pow(2.0*DOT_SIZE/rNorm, 6);
+                        else if ((p.type == ParticleType::S && (other.type == ParticleType::A ||
+                                                                other.type == ParticleType::B ||
+                                                                other.type == ParticleType::L)) ||
+                                 (other.type == ParticleType::S && (p.type == ParticleType::A ||
+                                                                    p.type == ParticleType::B ||
+                                                                    p.type == ParticleType::L)))
+                        {
+                            // Surfactant molecules S walling model
+                            if (rNorm < g_interaction_radius) {
+                                // Negative for repulsion
+                                //calculateForce_quadraticAttraction(-0.001, r, rNorm, force);
+                                float factor = std::pow(2.0*DOT_SIZE/rNorm, 6);
                                 p.force += -r * factor * (p.type != ParticleType::S ? 10.0f : 0.001f);
-                            p.force += force;
+                                p.force += force;
+                            }
                         }
-                    } else if ((p.type == ParticleType::A && other.type == ParticleType::F) ||
-                               (other.type == ParticleType::A && p.type == ParticleType::F))
-                    {
-                        //Chemical force 1: F makes B when catalysed by A
-                        if (rNorm < g_interaction_radius/2.0) {
-                            //Maybe TODO a commit mecahnism
-                            if (p.type == ParticleType::F) {p.type = ParticleType::B; p.spawnStep = _step;}
-                            if (other.type == ParticleType::F) {other.type = ParticleType::B; other.spawnStep = _step;}
+                        else if ((p.type == ParticleType::A && other.type == ParticleType::F) ||
+                                 (other.type == ParticleType::A && p.type == ParticleType::F))
+                        {
+                            //Chemical force 1: F makes B when catalysed by A
+                            if (rNorm < g_interaction_radius/2.0) {
+                                //Maybe TODO a commit mecahnism
+                                if (p.type == ParticleType::F) {p.type = ParticleType::B; p.spawnStep = _step;}
+                                if (other.type == ParticleType::F) {other.type = ParticleType::B; other.spawnStep = _step;}
+                            }
                         }
-                    } else if ((p.type == ParticleType::B && other.type == ParticleType::F) ||
-                               (other.type == ParticleType::B && p.type == ParticleType::F))
-                    {
-                        //Chemical force 2: F + B makes A + S
-                        if (rNorm < g_interaction_radius/2.0) {
-                            p.type = ParticleType::A;
-                            other.type = ParticleType::S;
-                            p.spawnStep = _step;
-                            other.spawnStep = _step;
+                        else if ((p.type == ParticleType::B && other.type == ParticleType::F) ||
+                                 (other.type == ParticleType::B && p.type == ParticleType::F))
+                        {
+                            //Chemical force 2: F + B makes A + S
+                            if (rNorm < g_interaction_radius/2.0) {
+                                p.type = ParticleType::A;
+                                other.type = ParticleType::S;
+                                p.spawnStep = _step;
+                                other.spawnStep = _step;
+                            }
                         }
-                    }  else if ((p.type == ParticleType::L && other.type == ParticleType::A) ||
-                               (other.type == ParticleType::A && p.type == ParticleType::L))
-                    {
-                        //Chemical force 3: R + A makes R + F // Test reaction limitor
-                        if (rNorm < g_interaction_radius/2.0) {
-                            p.type = ParticleType::F;
-                            other.type = ParticleType::L;
-                            p.spawnStep = _step;
-                            other.spawnStep = _step;
+                        else if ((p.type == ParticleType::L && other.type == ParticleType::A) ||
+                                 (other.type == ParticleType::A && p.type == ParticleType::L))
+                        {
+                            //Chemical force 3: R + A makes R + F // Test reaction limitor
+                            if (rNorm < g_interaction_radius/2.0) {
+                                p.type = ParticleType::F;
+                                other.type = ParticleType::L;
+                                p.spawnStep = _step;
+                                other.spawnStep = _step;
+                            }
                         }
                     }
                 }
@@ -410,23 +515,24 @@ struct Model {
 
             //Link forces
             /*assert(p.linked.size() <= 1);
-            for (Particle* otherLinked : p.linked) {
-                if (otherLinked != &p) {  // Avoid self-interaction
-                    sf::Vector2f r = otherLinked->position - p.position;
-                    float rNorm = norm(r);
-                    // Calculate force and torque using appropriate model
-                    sf::Vector2f force(0.0, 0.0);
-                    float torque = 0.0;
-                    //Force model for vesicle formation
-                    calculateForce_linearAttraction(20.0f, r, rNorm, force);
-                    p.force += force;
-                    p.torque += torque;
-                }
-            }*/
+              for (Particle* otherLinked : p.linked) {
+              if (otherLinked != &p) {  // Avoid self-interaction
+              sf::Vector2f r = otherLinked->position - p.position;
+              float rNorm = norm(r);
+              // Calculate force and torque using appropriate model
+              sf::Vector2f force(0.0, 0.0);
+              float torque = 0.0;
+              //Force model for vesicle formation
+              calculateForce_linearAttraction(20.0f, r, rNorm, force);
+              p.force += force;
+              p.torque += torque;
+              }
+              }*/
 
             if (g_destroy_at_boundary) { //p.type == ParticleType::S ||
                 // Containing delete
                 if ((p.position.x > WORLD_WIDTH/2) || (p.position.x < -WORLD_WIDTH/2) || (p.position.y > WORLD_HEIGTH/2) || (p.position.y < -WORLD_HEIGTH/2)) {
+                    plug.removeParticle(p);
                     itp = particles.erase(itp);
                     continue;
                 }
@@ -499,6 +605,8 @@ struct Model {
             // Update the particle's shape position
             p.shape.setPosition(p.position);
             p.shape.setFillColor(getColor(p.type));
+
+            plug.updateCell(p);
         }
     }
 };
@@ -513,17 +621,17 @@ void drawModel(sf::RenderWindow& ioWindow, const sf::RectangleShape& iWorldRect,
         //    lines[1].position = other->position;
         //    lines[0].color = sf::Color::Green;
         //    lines[1].color = sf::Color::Green;
-            //ioWindow.draw(lines);
+        //ioWindow.draw(lines);
         //}
 
         // Tail
         if (p.type == ParticleType::S) {
             float tailLength = 10.0;
             sf::Vertex line[] =
-            {
-                sf::Vertex(p.position, sf::Color::White),
-                sf::Vertex(p.position + tailLength*unitVectorFromAngle(p.orientation+M_PI), sf::Color::White)
-            };
+                {
+                    sf::Vertex(p.position, sf::Color::White),
+                    sf::Vertex(p.position + tailLength*unitVectorFromAngle(p.orientation+M_PI), sf::Color::White)
+                };
             ioWindow.draw(line, 2, sf::Lines);
         }
 
