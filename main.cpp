@@ -13,7 +13,6 @@
 #define M_PI 3.14159265358979323846
 #endif
 
-
 static int K_INIT_PARTICLES = 0;
 static int WORLD_WIDTH = 480;//960;//1920;
 static int WORLD_HEIGTH = 270;//540;//1080;
@@ -58,13 +57,11 @@ struct Particle {
     sf::Vector2f position;
     sf::Vector2f velocity;
     float orientation;
-    //float midAngle; //debug
     float angularVelocity;
     sf::Vector2f force;
     float torque;
     ParticleType type;
     int spawnStep;
-    //std::vector<Particle*> linked;
     //Having view related objects in the model object is not ideal
     //but in SFML not rebuilding the graphical object is significantly faster
     sf::CircleShape shape;
@@ -94,24 +91,6 @@ sf::Vector2f rotateVector(const sf::Vector2f& v, float alpha) {
 float dot(const sf::Vector2f& v1, const sf::Vector2f& v2) {
     return v1.x * v2.x + v1.y * v2.y;
 }
-
-/*
-float colinearFactor(sf::Vector2f v1, sf::Vector2f v2) {
-    float dotProduct = v1.x * v2.x + v1.y * v2.y;
-    float lengthsProduct = std::sqrt(v1.x * v1.x + v1.y * v1.y) * std::sqrt(v2.x * v2.x + v2.y * v2.y);
-
-    // prevent division by zero
-    if(lengthsProduct == 0.f)
-        return 0.f;
-
-    float cosineOfAngle = dotProduct / lengthsProduct;
-
-    // Clamp the value to the [-1, 1] range, in case of numerical instability
-    cosineOfAngle = std::max(-1.f, std::min(1.f, cosineOfAngle));
-
-    return cosineOfAngle;
-}
-*/
 
 //////////////////////////////////////////////////////////////////////////////
 float norm(const sf::Vector2f& vec) {
@@ -153,38 +132,6 @@ double middleAngle(double theta1, double theta2) {
 
     return middle;
 }
-
-//////////////////////////////////////////////////////////////////////////////
-/*sf::Color getColor(int type) {
-    // Convert the type to a hue value between 0 and 360 degrees
-    float hue = (type % K_NB_TYPE) * (360.0f / 16.0f);
-
-    // For simplicity, we'll keep saturation and lightness constant
-    float saturation = 1.0f;
-    float lightness = 0.5f;
-
-    // Convert from HSL to RGB using the formula
-    float c = (1.0f - std::abs(2.0f * lightness - 1.0f)) * saturation;
-    float x = c * (1.0f - std::abs(std::fmod(hue / 60.0f, 2.0f) - 1.0f));
-    float m = lightness - c / 2.0f;
-
-    float r = 0, g = 0, b = 0;
-    if (0 <= hue && hue < 60) {
-        r = c, g = x, b = 0;
-    } else if (60 <= hue && hue < 120) {
-        r = x, g = c, b = 0;
-    } else if (120 <= hue && hue < 180) {
-        r = 0, g = c, b = x;
-    } else if (180 <= hue && hue < 240) {
-        r = 0, g = x, b = c;
-    } else if (240 <= hue && hue < 300) {
-        r = x, g = 0, b = c;
-    } else if (300 <= hue && hue < 360) {
-        r = c, g = 0, b = x;
-    }
-
-    return sf::Color((r + m) * 255, (g + m) * 255, (b + m) * 255);
-}*/
 
 sf::Color getColor(const ParticleType& iParticleType) {
     switch (iParticleType) {
@@ -318,11 +265,6 @@ struct Model {
     }
 
     //////////////////////////////////////////////////////////////////////////////
-    //void calculateForce_linearAttraction(float forceMagnitude, const sf::Vector2f& r, float rNorm, sf::Vector2f& force) {
-    //    force = r * (forceMagnitude / rNorm);
-    //}
-
-    //////////////////////////////////////////////////////////////////////////////
     void calculateForce_quadraticAttraction(float forceMagnitude, const sf::Vector2f& r, float rNorm, sf::Vector2f& force) {
         force = r * (forceMagnitude / (rNorm*rNorm));
     }
@@ -408,22 +350,6 @@ struct Model {
                 }
             }
 
-            //Link forces
-            /*assert(p.linked.size() <= 1);
-            for (Particle* otherLinked : p.linked) {
-                if (otherLinked != &p) {  // Avoid self-interaction
-                    sf::Vector2f r = otherLinked->position - p.position;
-                    float rNorm = norm(r);
-                    // Calculate force and torque using appropriate model
-                    sf::Vector2f force(0.0, 0.0);
-                    float torque = 0.0;
-                    //Force model for vesicle formation
-                    calculateForce_linearAttraction(20.0f, r, rNorm, force);
-                    p.force += force;
-                    p.torque += torque;
-                }
-            }*/
-
             if (g_destroy_at_boundary) { //p.type == ParticleType::S ||
                 // Containing delete
                 if ((p.position.x > WORLD_WIDTH/2) || (p.position.x < -WORLD_WIDTH/2) || (p.position.y > WORLD_HEIGTH/2) || (p.position.y < -WORLD_HEIGTH/2)) {
@@ -506,16 +432,6 @@ struct Model {
 void drawModel(sf::RenderWindow& ioWindow, const sf::RectangleShape& iWorldRect, const Model& iModel) {
     for (const auto& p : iModel.particles)
     {
-        // Links
-        //sf::VertexArray lines(sf::Lines, 2);
-        //for (auto& other : p.linked) {
-        //    lines[0].position = p.position;
-        //    lines[1].position = other->position;
-        //    lines[0].color = sf::Color::Green;
-        //    lines[1].color = sf::Color::Green;
-            //ioWindow.draw(lines);
-        //}
-
         // Tail
         if (p.type == ParticleType::S) {
             float tailLength = 10.0;
@@ -526,32 +442,6 @@ void drawModel(sf::RenderWindow& ioWindow, const sf::RectangleShape& iWorldRect,
             };
             ioWindow.draw(line, 2, sf::Lines);
         }
-
-        // MidAngle debug
-        //float mdLength = 30.0;
-        //sf::Vertex linemd[] =
-        //{
-        //    sf::Vertex(p.position, sf::Color::Yellow),
-        //    sf::Vertex(p.position + mdLength*unitVectorFromAngle(p.midAngle), sf::Color::Yellow)
-        //};
-        //ioWindow.draw(linemd, 2, sf::Lines);
-
-        //Force debug
-        //sf::Vertex lineF[] =
-        //{
-        //    sf::Vertex(p.position, sf::Color::Red),
-        //    sf::Vertex(p.position + 10.0f*p.force, sf::Color::Red)
-        //};
-        //ioWindow.draw(lineF, 2, sf::Lines);
-
-        //Speed debug
-        //sf::Vertex lineV[] =
-        //{
-        //    sf::Vertex(p.position, sf::Color::Green),
-        //    sf::Vertex(p.position + 10.0f*p.velocity, sf::Color::Green)
-        //};
-        //ioWindow.draw(lineV, 2, sf::Lines);
-
 
         if (iModel._step > p.spawnStep && iModel._step < p.spawnStep+g_persistence*s_fps*g_ksteps_per_frame)
         {
@@ -567,8 +457,6 @@ void drawModel(sf::RenderWindow& ioWindow, const sf::RectangleShape& iWorldRect,
             ioWindow.draw(circle);
         }
         ioWindow.draw(p.shape);
-        //ioWindow.draw(lineF, 2, sf::Lines);
-        //ioWindow.draw(lines);
 
         //Draw interaction radius
         if (p.type == ParticleType::S && g_draw_s_interaction_radius) {
@@ -615,7 +503,6 @@ int main()
     worldRect.setFillColor(sf::Color::Transparent);
     worldRect.setOrigin(WORLD_WIDTH / 2.0f, WORLD_HEIGTH / 2.0f);
     worldRect.setPosition(0.0f, 0.0f);
-
 
     // main loop
     sf::Clock deltaClock;
