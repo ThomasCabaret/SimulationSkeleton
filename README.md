@@ -44,13 +44,24 @@ git clone --recursive https://github.com/ThomasCabaret/SimulationSkeleton.git
 ```
 Note: The `--recursive` parameter is necessary to check out the vcpkg submodule as well. Besides that, submodules are not normally updated by the standard `git pull` command. Instead, you need to write `git pull --recurse-submodules`.
 
-### Build instructions
-Prerequisites: [CMake](https://cmake.org/download/) >= 3.24 and a toolchain for CMake (e.g. GCC 9.x+ or [MSVC v142+](https://visualstudio.microsoft.com/free-developer-offers/)).
+### Build instructions (tested on windows only): 
+- [Docker desktop](https://www.docker.com/products/docker-desktop/)
+- [X server vcxsrv](https://sourceforge.net/projects/vcxsrv/)
+
+1. Open vcxsrv and keep everything default
+2. Open projetc in vscode and click `Re-open in container`
 
 Build steps:
-```
-mkdir build && cd build
+```bash
+# TODO: Find a way to have this command done in Dockerfile
+cd /usr/local/vcpkg && git fetch --unshallow
+# Clean up files if previous files exists :
+rm -rf  /workspaces/SimulationSkeleton/build/*
+cd /workspaces//SimulationSkeleton/ && mkdir -p build && cd build
 cmake .. -DCMAKE_BUILD_TYPE=Release
 cmake --build . --config Release -j8
 ```
-If everything goes well, the ParticleLife executable can be found under the build directory in `./ParticleLife` or `.\Release\ParticleLife.exe` depending on the used toolchain and platform.
+
+Run the program `./ParticleLife`
+
+

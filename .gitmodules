@@ -1,3 +1,0 @@
-[submodule "vcpkg"]
-	path = external/vcpkg
-	url = https://github.com/dg0yt/vcpkg.git
