@@ -45,12 +45,11 @@ git clone --recursive https://github.com/ThomasCabaret/SimulationSkeleton.git
 Note: The `--recursive` parameter is necessary to check out the vcpkg submodule as well. Besides that, submodules are not normally updated by the standard `git pull` command. Instead, you need to write `git pull --recurse-submodules`.
 
 ### Build instructions
-Prerequisites: [CMake](https://cmake.org/download/) >= 3.24 and a toolchain for CMake (e.g. GCC 9.x+ or [MSVC v142+](https://visualstudio.microsoft.com/free-developer-offers/)).
 
-Build steps:
-```
-mkdir build && cd build
-cmake .. -DCMAKE_BUILD_TYPE=Release
-cmake --build . --config Release -j8
-```
-If everything goes well, the ParticleLife executable can be found under the build directory in `./ParticleLife` or `.\Release\ParticleLife.exe` depending on the used toolchain and platform.
+Tested on windows:
+- Visual studio community 2022  17.11.2 with:
+    - MSVC V143 C++ x64 x86
+    - C++ CMake tools for Windows
+    - Windows 11 SDK 10.0.22621.0
+
+Just open the directory of the project after above mentionned clone, visual studio is supposed to handle everything.
