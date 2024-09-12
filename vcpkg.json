@@ -8,18 +8,12 @@
         },
         {
             "name": "sfml",
-            "version>=": "2.6.0#17"
+            "version>=": "2.6.1"
         },
         {
             "name": "imgui-sfml",
-            "version>=": "2.5#4"
+            "version>=": "2.6"
         }
     ],
-    "builtin-baseline": "9d47b24eacbd1cd94f139457ef6cd35e5d92cc84",
-    "overrides": [
-        {
-            "name": "openal-soft",
-            "version": "1.22.2"
-        }
-    ]
+    "builtin-baseline": "b8a9371ae5a920b021132f443cc5658e82ac7551"
 }
