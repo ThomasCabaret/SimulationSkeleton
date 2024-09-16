@@ -49,7 +49,8 @@ git clone https://github.com/ThomasCabaret/SimulationSkeleton.git
 - [X server vcxsrv](https://sourceforge.net/projects/vcxsrv/)
 
 1. Open vcxsrv and keep everything default
-2. Open projetc in vscode and click `Re-open in container`
+2. Open Docker desktop
+3. Open project in vscode and click `Re-open in container`
 
 Build steps:
 ```bash
