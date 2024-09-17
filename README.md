@@ -35,21 +35,34 @@ After that the steps could be:
 
 
 # How to build the sources
-The build process is mostly automated using the cross-platform CMake build system and the vcpkg package manager, which is included as a Git submodule.
+The build process is mostly automated using the cross-platform CMake build system and the vcpkg package manager.
 
 ### Getting the sources
 To obtain the sources, please open a command prompt in a suitable directory (which should not contain whitespace characters) and enter the following command:
 ```
-git clone --recursive https://github.com/ThomasCabaret/SimulationSkeleton.git
+git clone https://github.com/ThomasCabaret/SimulationSkeleton.git
 ```
-Note: The `--recursive` parameter is necessary to check out the vcpkg submodule as well. Besides that, submodules are not normally updated by the standard `git pull` command. Instead, you need to write `git pull --recurse-submodules`.
 
-### Build instructions
 
-Tested on windows:
-- Visual studio community 2022  17.11.2 with:
-    - MSVC V143 C++ x64 x86
-    - C++ CMake tools for Windows
-    - Windows 11 SDK 10.0.22621.0
+### Build instructions (tested on windows only): 
+- [Docker desktop](https://www.docker.com/products/docker-desktop/)
+- [X server vcxsrv](https://sourceforge.net/projects/vcxsrv/)
 
-Just open the directory of the project after above mentionned clone, visual studio is supposed to handle everything.
+1. Open vcxsrv and keep everything default
+2. Open Docker desktop
+3. Open project in vscode and click `Re-open in container`
+
+Build steps:
+```bash
+# TODO: Find a way to have this command done in Dockerfile
+cd /usr/local/vcpkg && git fetch --unshallow
+# Clean up files if previous files exists :
+rm -rf  /workspaces/SimulationSkeleton/build/*
+cd /workspaces//SimulationSkeleton/ && mkdir -p build && cd build
+cmake .. -DCMAKE_BUILD_TYPE=Release
+cmake --build . --config Release -j8
+```
+
+Run the program `./ParticleLife`
+
+

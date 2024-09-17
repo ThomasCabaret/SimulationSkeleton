@@ -15,5 +15,11 @@
             "version>=": "2.6"
         }
     ],
-    "builtin-baseline": "b8a9371ae5a920b021132f443cc5658e82ac7551"
+    "builtin-baseline": "b4624c3a701b11248d88aab08744a37ee7aea1cc",
+    "overrides": [
+        {
+            "name": "openal-soft",
+            "version": "1.22.2"
+        }
+    ]
 }
